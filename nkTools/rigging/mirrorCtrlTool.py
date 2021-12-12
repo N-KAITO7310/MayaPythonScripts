@@ -28,17 +28,16 @@ def mirrorCtrlTool():
             print("Please Select Curve");
             return;
 
-    allCtrlInfo = {};
-
     # Main Roop Start
     for ctrl in selected:
         #get ctrl side
         side = ctrl[0];
 
-        if side=='L':
-            Oside='R';
-        elif side=='R':
-            Oside='L';
+        Oside = "";
+        if side=='l':
+            Oside='r';
+        elif side=='r':
+            Oside='l';
 
         OsideCtrl = ctrl.replace(side,Oside, 1);
 
@@ -46,7 +45,7 @@ def mirrorCtrlTool():
         parentctrl = cmds.listRelatives(ctrl, p=True)[0];
 
         #get jnt
-        jnt = ctrl.replace('Ctrl','Jnt', 1);
+        jnt = ctrl.replace('ctrl','jnt', 1);
         OsideJnt = jnt.replace(side,Oside, 1);
 
         #if joint doesnt exists, fail
@@ -108,7 +107,7 @@ def mirrorCtrlTool():
             # get transform named Ctrl
             ctrlChildren = cmds.listRelatives(ctrl, ad=True, type="transform");
             if ctrlChildren:
-                ctrls = [obj for obj in ctrlChildren  if obj.endswith("_Ctrl")];
+                ctrls = [obj for obj in ctrlChildren  if obj.endswith("_ctrl")];
                 ctrls.append(ctrl);
             else:
                 ctrls = [ctrl];
