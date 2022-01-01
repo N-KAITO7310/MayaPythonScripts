@@ -27,9 +27,9 @@ for i, s in enumerate(selected):
     joint = cmds.joint(n="r_eyeBlow_ribbon_{0}_jnt".format(i.zfill(2)))
     cmds.setAttr(joint + ".radius", 0.1);
     
-# create Remap
-jawJoint = "r_eye_jnt";
-jawControl = "r_eye_ctrl";
+# create Remap for jaw
+jawJoint = "jaw_jnt";
+jawControl = "jaw_ctrl";
 
 offsetValue = 0;
 controlList = cmds.ls(sl=1);
@@ -37,13 +37,15 @@ controlList = cmds.ls(sl=1);
 print(controlList);
 
 prefix = str(controlList[0])[:str(controlList[0]).rfind("_ctrl")];
-# prefix2 = str(controlList[1])[:str(controlList[1]).rfind("_ctrl")];
+if len(controlList) > 1 :
+    prefix2 = str(controlList[1])[:str(controlList[1]).rfind("_ctrl")];
+
 
 multi = cmds.shadingNode("multiplyDivide", au=True, n=prefix + "_MDN");
 remap = cmds.shadingNode("remapValue", au=True, n=prefix + "_remap");
 
 cmds.connectAttr(jawJoint + ".rotate", multi + ".input1", f=True);
-cmds.connectAttr(jawControl + ".EyeInfluence", remap + ".inputValue", f=True);
+cmds.connectAttr(jawControl + ".LipInfluence", remap + ".inputValue", f=True);
 
 xyzList = ["X", "Y", "Z"];
 for i in xyzList:
@@ -56,6 +58,60 @@ cmds.connectAttr(multi + ".output", prefix + "_driver_grp.rotate", f=True);
 
 if len(controlList) > 1:
     cmds.connectAttr(multi + ".output", prefix2 + "_driver_grp.rotate", f=True);
+
+
+# create Remap fpr Eye
+sidePrefix = str(cmds.ls(sl=True)[0])[:2];
+
+eyeJoint = sidePrefix + "eye_jnt";
+eyeControl = sidePrefix + "eye_ctrl";
+
+offsetValue = 0;
+controlList = cmds.ls(sl=1);
+
+print(controlList);
+
+prefix = str(controlList[0])[:str(controlList[0]).rfind("_ctrl")];
+if len(controlList) > 1 :
+    prefix2 = str(controlList[1])[:str(controlList[1]).rfind("_ctrl")];
+
+
+multi = cmds.shadingNode("multiplyDivide", au=True, n=prefix + "_MDN");
+remap = cmds.shadingNode("remapValue", au=True, n=prefix + "_remap");
+
+pma = cmds.shadingNode("plusMinusAverage", au=True, n=prefix + "Blink_PMA");
+cmds.connectAttr(eyeControl + ".BlinkHeight", pma + ".input1D[0]");
+cmds.connectAttr(eyeControl + ".BlinkHeight", pma + ".input1D[1]");
+cmds.disconnectAttr(eyeControl + ".BlinkHeight", pma + ".input1D[1]");
+# input1D[1]への入力は各コントローラの回転値毎に手動で行う
+cmds.connectAttr(pma + ".output1D", remap + ".outputMax");
+
+# follow Eye
+eyeInfPMA = cmds.shadingNode("plusMinusAverage", au=True, n=prefix + "_eyeInf_PMA");
+eyeInfMulti = cmds.shadingNode("multiplyDivide", au=True, n=prefix + "_eyeInf_MDN");
+cmds.connectAttr(eyeJoint + ".rotate", eyeInfMulti + ".input1");
+cmds.connectAttr(eyeInfMulti + ".output", eyeInfPMA + ".input3D[0]");
+cmds.connectAttr(multi + ".output", eyeInfPMA + ".input3D[1]");
+cmds.connectAttr(eyeInfPMA + ".output3D", prefix + "_driver_grp" + ".rotate");
+if len(controlList) > 1:
+    cmds.connectAttr(eyeInfPMA + ".output3D", prefix2 + "_driver_grp" + ".rotate", f=True);
+
+cmds.connectAttr(eyeControl + ".Blink", multi + ".input1X", f=True);
+cmds.connectAttr(eyeControl + ".EyeInfluence", remap + ".inputValue", f=True);
+
+xyzList = ["X", "Y", "Z"];
+eyeInfRatio = 0.25
+for i, axis in enumerate(xyzList):
+    cmds.connectAttr(remap + ".outValue", multi + ".input2{}".format(axis));
+    if "r_" in sidePrefix and i > 0:
+        cmds.setAttr(eyeInfMulti + ".input2{0}".format(axis), eyeInfRatio * 1);
+    else:
+        cmds.setAttr(eyeInfMulti + ".input2{0}".format(axis), eyeInfRatio);
+    
+    
+cmds.setAttr(remap + ".inputMin", offsetValue);
+cmds.setAttr(remap + ".inputMax", offsetValue + 1);
+
 
 # create driver grp
 masterGroup = "r_eyeLid_ribbon_ctrl_grp";
@@ -80,7 +136,7 @@ for i in selected:
     cmds.matchTransform(parent, i, rot=True, pos=False, scl=False);
     cmds.parent(i, parent);
     
-# create offset grp
+# create offset grp for under the group
 masterGroup = "l_eyeLid_ribbon_ctrl_jnt_grp";
 selected = cmds.ls(sl=True);
 for obj in selected:
@@ -89,6 +145,17 @@ for obj in selected:
     offsetGrp = cmds.group(em=True, n=prefix + "_offset_grp");
     cmds.parent(offsetGrp, masterGroup)
     cmds.matchTransform(offsetGrp, obj, pos=True, rot=True, scl=True);
+    cmds.parent(obj, offsetGrp);
+    
+# create offset grp 
+selected = cmds.ls(sl=True);
+for obj in selected:
+    obj = str(obj);
+    parentObj = str(cmds.listRelatives(obj, p=True)[0]);
+    prefix = obj[:obj.rfind("_grp")];
+    offsetGrp = cmds.group(em=True, n=prefix + "_driver_grp");    
+    cmds.matchTransform(offsetGrp, obj, pos=True, rot=True, scl=True);
+    cmds.parent(offsetGrp, parentObj)
     cmds.parent(obj, offsetGrp);
     
 # create jnt under joint 
@@ -157,15 +224,7 @@ for jnt in stretchJnts:
         cmds.connectAttr(stretchMDN + ".outputX", jnt + ".scaleX");
     else:
         cmds.connectAttr(scaleBC + ".color1R", jnt + ".scaleX");
-
-
-# parent shape
-resource = cmds.ls(sl=True)[0];
-target = cmds.ls(sl=True)[1];
-targetSahpe = cmds.listRelatives(str(target), s=True)[0];
-resourceShape = str(cmds.listRelatives(str(resource), s=True)[0]);
-cmds.parent(resourceShape, target, add=True, shape=True);
-cmds.delete(resource, targetSahpe);
+        
 
 # proximityPin用のコントローラグループにドライバを設定しコンストレイントする(ProximityPinは手動で行う)
 targetGrps = cmds.ls(sl=True);
@@ -177,7 +236,7 @@ for targetGrp in targetGrps:
     cmds.parent(driverGrp, target);
     auto = str(cmds.listRelatives(target, c=True)[0]);
     ctrl = str(cmds.listRelatives(auto, c=True)[0]);
-    cmds.pointConstraint(driverGrp, ctrl, mo=False);
+    cmds.pointConstraint(driverGrp, auto, mo=False);
 
 # followコントローラとスキンジョイント用コントローラとを接続する
 ctrls = cmds.ls(sl=True);
@@ -186,9 +245,47 @@ for ctrl in ctrls:
     ctrl = followCtrl.replace("_follow_ctrl", "");
     auto = str(cmds.listRelatives(p=True)[0]);
     print(auto);
-    cmds.connectAttr(followCtrl + ".translate", auto + "translate");
-    cmds.connectAttr(followCtrl + ".rotate", auto + "rotate");
+    cmds.connectAttr(followCtrl + ".translate", ctrl + ".translate");
+    cmds.connectAttr(followCtrl + ".rotate", ctrl + ".rotate");
 
+# parent: multi shape to one parent
+parent = cmds.ls(sl=True)[0];
+childList = cmds.ls(sl=True)[1:];
+for child in childList:
+    child = str(child);
+    shape = cmds.listRelatives(child, s=True);
+    cmds.parent(shape, parent, add=True, s=True);
+    cmds.delete(child);
+    
+# parent: one shape to one parent
+shapeTrans = cmds.ls(sl=True)[0];
+shape = str(cmds.listRelatives(shapeTrans, s=True)[0]);
+offset = str(cmds.listRelatives(shapeTrans, p=True)[0]);
+target = cmds.ls(sl=True)[1];
+targetOriginalShape = cmds.listRelatives(target, s=True);
+cmds.parent(shape, target, add=True, s=True);
+cmds.delete(targetOriginalShape);
+cmds.delete(offset);
+
+# for gameEngine:reset joint rotate axis offset
+joints = cmds.ls(sl=True);
+for jnt in joints:
+    jnt = str(jnt);
+    cmds.joint(jnt, e=True, zso=True);
+
+# implicit
+cmds.createNode("implicitCone");
+cmds.createNode("implicitSphere");
+
+# add a proxy attribute
+parentCtrlName = "l_arm_fkikSwitch_ctrl"
+cmds.addAttr(ln="IKFKSwitch", proxy="{0}.FKIKSWitch".format(parentCtrlName));
+
+# set overrideEnabled
+objs = cmds.ls(sl=True);
+for obj in objs:
+    obj = str(obj);
+    cmds.setAttr("{0}.overrideEnabled".format(obj), 1);
 
 # make dynamic
 """

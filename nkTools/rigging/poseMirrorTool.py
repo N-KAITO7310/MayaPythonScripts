@@ -15,8 +15,7 @@ Memo
 ・プリフィックスのないものは逆の値を入れる
 """
 
-def mirrorPoseTool:
-    import maya.cmds as cmds;
+def mirrorPoseTool():
 
     driver = str(cmds.ls(sl=True)[0]);
     driven = str(cmds.ls(sl=True)[1]);
