@@ -13,7 +13,7 @@ import glob
 
 
 """
-version: 1.1
+version: 1.2
 created Date: 2022/02/01
 last update: 2022/02/14
 
@@ -201,13 +201,14 @@ def mirrorPoseSameAxis(controllerList):
     for ctrl in controllerList:
         # search mirror target
         mirrorTargetCtrl = ctrl;
-        if "l_" in ctrl:
+        sidePrefix = ctrl[0:2];
+        if "l_" == sidePrefix:
             mirrorTargetCtrl = ctrl.replace("l_", "r_", 1);
-        elif "r_" in ctrl:
+        elif "r_" == sidePrefix:
             mirrorTargetCtrl = ctrl.replace("r_", "l_", 1);
         if not mirrorTargetCtrl in controllerList:
             continue;
-            
+        
         # create transform for each ctrl and connect by constrain
         source = cmds.createNode("transform", n="{}_source".format(ctrl));
         inputSourceList.append(source);
@@ -347,13 +348,7 @@ def mirrorPoseSameAxis(controllerList):
         cmds.connectAttr("{}.outFloat".format(mirrorTxFM), "{}.tx".format(outputOffset));
         cmds.connectAttr("{}.ty".format(source), "{}.ty".format(outputOffset));
         cmds.connectAttr("{}.tz".format(source), "{}.tz".format(outputOffset));
-        """
-        現状これを行うと、outputNodeは反対側と同じ位置・向きとなり、後のコードでコンストレインを行っても同じ状態になるだけで意味をなさない
-        必要性が現状わからない
-        # adjust outputNode axis
-        cmds.delete(cmds.pointConstraint(mirrorTargetCtrl, outputNode, mo=False));
-        cmds.delete(cmds.orientConstraint(mirrorTargetCtrl, outputNode, mo=False));
-        """
+        
     
     # bake output offset
     startF = cmds.playbackOptions(q=True, min=True);
@@ -370,10 +365,12 @@ def mirrorPoseSameAxis(controllerList):
     
     for ctrl in controllerList:
         sourceCtrl = ctrl;
-        if "l_" in ctrl:
-            sourceCtrl = ctrl.replace("l_", "r_");
-        elif "r_" in ctrl:
-            sourceCtrl = ctrl.replace("r_", "l_");
+        sidePrefix = ctrl[0:2];
+        
+        if "l_" == sidePrefix:
+            sourceCtrl = ctrl.replace("l_", "r_", 1);
+        elif "r_" == sidePrefix:
+            sourceCtrl = ctrl.replace("r_", "l_", 1);
             
         if not sourceCtrl in outputDict.keys():
             continue;
@@ -392,7 +389,7 @@ def mirrorFKIKSwitch():
     for lSide in lSideSwitchList:
         lSideCondition = cmds.getAttr("{}.FKIKSwitch".format(lSide));
         suffix = lSide[lSide.find("l_") + 2:];
-        print(suffix)
+        
         rSide = [r for r in rSideSwitchList if suffix in r];
         if rSide is None or len(rSide) == 0:
             print("mirror side fkikSwitch is not exist");
@@ -410,15 +407,37 @@ def mirrorPose():
     3. 回転軸が反転している場合は、念のためQuatに変換してから接続
     4. 移動はX軸ミラーのため、ｘのみー１をかけた値をセットする
     
-    残タスク
+    残タスク02/14
     ・対象コントローラをどう振り分けるか
-    ・胴体部分について、なぜ回転をミラーできないのかの検証
+    ・首のUp軸がXのため、現状ミラーに成功していない。この問題を解決しなければ、首・頭のミラーができない。
     """
-    # get controllers (this method return Dict type. keys are controllerName);
+    # controllerList var
+    # TODO: reveal hierarchy automate
     behaviorAxisControllerSet = "mirror_system_behaviorAxis_ctrl_set";
     behaviorAxisControllerList = cmds.sets(behaviorAxisControllerSet, q=True);
-    sameAxisControllerSet = "mirror_system_samerAxis_ctrl_set";
-    sameAxisControllerList = cmds.sets(sameAxisControllerSet, q=True);
+    sameAxisControllerList = [
+        "cog_ctrl",
+        "r_foot_fk_ctrl",
+        "l_foot_fk_ctrl",
+        "r_foot_ik_ctrl",
+        "l_foot_ik_ctrl",
+        "lower_spine_ik_ctrl",
+        "chest_ik_ctrl",
+        "shoulder_ik_ctrl",
+        "pelvis_fk_ctrl",
+        "mid_spine_fk_ctrl",
+        "chest_fk_ctrl",
+        "shoulder_fk_ctrl",
+        "front_armor_down_A_fk_ctrl",
+        "front_armor_down_B_fk_ctrl",
+        "front_armor_down_C_fk_ctrl",
+        "front_armor_down_D_fk_ctrl",
+        "front_armor_down__A_ik_ctrl",
+        "front_armor_down__B_ik_ctrl",
+        "front_armor_down__C_ik_ctrl",
+        "front_armor_down__D_ik_ctrl"
+    ];
+    # TODO: head and neck, pattern differentAxis Xup
     
     mirrorPoseBehaviorAxis(behaviorAxisControllerList);
     mirrorPoseSameAxis(sameAxisControllerList);
