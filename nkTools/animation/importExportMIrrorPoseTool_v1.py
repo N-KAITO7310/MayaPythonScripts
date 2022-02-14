@@ -300,11 +300,6 @@ def mirrorPoseSameAxis(controllerList):
         cmds.connectAttr("{}.outputTranslateY".format(bendVectorDecompose), "{}.vector2Y".format(bendAngle));
         cmds.connectAttr("{}.outputTranslateZ".format(bendVectorDecompose), "{}.vector2Z".format(bendAngle));
         
-        # temp connect for set default value
-        cmds.connectAttr("{}.vector2".format(bendAngle), "{}.vector1".format(bendAngle));
-        cmds.disconnectAttr("{}.vector2".format(bendAngle), "{}.vector1".format(bendAngle));
-        
-        
         # construct Roll
         cmds.connectAttr("{}.outFloat".format(mirrorRollVecFM), "{}.vector2X".format(rollAngle));
         cmds.connectAttr("{}.outputTranslateY".format(rollVectorDecompose), "{}.vector2Y".format(rollAngle));
