@@ -243,7 +243,7 @@ def autoDynamicsSetupTool():
     dynCurve = str(cmds.rename(dynCurve, baseDynCurve.replace("_base_dynamics_", "_dynamics_")));
     nucleus = str(cmds.listConnections(hairSystemShape + ".startState", type="nucleus", d=True)[0]);
     
-    # delete nHair grpq
+    # delete nHair grp
     hairsystemFollicleGrp = str(cmds.listRelatives(follicle, p=True)[0]);
     hairSystemOutputCurveGrp = str(cmds.listRelatives(dynCurve, p=True)[0]);
 

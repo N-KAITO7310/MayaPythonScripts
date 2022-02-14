@@ -5,10 +5,10 @@ Auto FK Ik SetUp Tool to Arm or Leg
 version:1.0
 created date:2021/11/01~
 
-from nkTools.rigging import autoFKIKSetUpTool_v2;
-reload(autoFKIKSetUpTool_v2);
-reload(autoFKIKSetUpTool_v2.qt);
-autoFKIKSetUpTool_v2.option();
+from nkTools.rigging import autoFKIKSetUpTool;
+reload(autoFKIKSetUpTool);
+reload(autoFKIKSetUpTool.qt);
+autoFKIKSetUpTool.option();
 
 """
 
@@ -38,9 +38,9 @@ def autoFKIKSetUpTool():
     bodyPrefix = "";
     if rigType == 0:
         if isLower:
-            bodyPrefix = "leg_";
-        else:
             bodyPrefix = "arm_";
+        else:
+            bodyPrefix = "leg_";
     if rigType == 1:
         bodyPrefix = "leg_";
 
@@ -72,13 +72,7 @@ def autoFKIKSetUpTool():
     jointHierarchy = cmds.listRelatives(jointRoot, ad=True, type="joint");
     jointHierarchy.append(jointRoot);
     jointHierarchy.reverse();
-    
-    
-    # Bifurcation setup type
-    if rigType == 0:
-        setupBiped(whichSide, prefix, jointHierarchy[0], jointHierarchy);
-        return;
-    
+
     # create new joint ilst
     fkSuffix = "_fk_jnt";
     ikSuffix = "_ik_jnt";
@@ -470,8 +464,7 @@ def createFkHierarchy(fkAndOffsetList):
 
 def createFKIKSwitchCtrl(side, prefix, posObj):
     # FKIKSwitch
-    fkikSwitchCtrlOffset = createCurveAndOffset(5, prefix + "fkikSwitch_ctrl", posObj, 10);
-    print(fkikSwitchCtrlOffset[0]);
+    fkikSwitchCtrlOffset = createCurveAndOffset(5, prefix + "_fkikSwitch_ctrl", posObj, 10);
     cmds.move(10*side, 0, 0, fkikSwitchCtrlOffset[0], r=True, wd=True);
     cmds.addAttr(fkikSwitchCtrlOffset[1], ln="FKIKSwitch", at="double", min=0, max=1 ,dv=1);
     cmds.setAttr(fkikSwitchCtrlOffset[1] + ".FKIKSwitch", e=True, keyable=True);
@@ -479,7 +472,6 @@ def createFKIKSwitchCtrl(side, prefix, posObj):
     cmds.setAttr(fkikSwitchCtrlOffset[1] + ".VolumeOffset", e=True, keyable=True);
     fkikReverse = cmds.shadingNode("reverse", au=True, n=prefix + "_fkik_reverse");
     cmds.connectAttr(fkikSwitchCtrlOffset[1] + ".FKIKSwitch", fkikReverse + ".inputX", f=True);
-    fkikSwitchCtrlOffset.append(fkikReverse);
 
     return fkikSwitchCtrlOffset;
 
@@ -503,19 +495,19 @@ def connectMainJntToFKIK(switchCtrl, mainJnts):
             cmds.connectAttr(ikJnt + ".rotate" + axis, rotBC + ".color1" + rgb[i]);
             cmds.connectAttr(rotBC + ".output" + rgb[i], mainJnt + ".rotate" + axis);
 
-# setup Biped Arm or Leg
-def setupBiped(side, prefix, root, jointHierarchy):
+def setupBipedArm(side, prefix, root, jointHierarchy):
+    """
+    ・ルートジョイントから複製
+    ・IK,FKにリネーム
+    ・ブレンドカラーでメインジョイントに接続
+    ・FKコントローラ作成、階層化
+    ・IKコントローラ作成
+    """
 
-    print("start setup Arm");
     armJointsNum = 3;
-    fkikSwitchCtrlName = prefix + "fkikSwitch_ctrl";
-    print(side, prefix, root);
-    sideNum = 1;
-    if not side in "l_":
-        side = -1;
-    fkikSwitchCtrlAndOffset = createFKIKSwitchCtrl(sideNum, prefix, root);
+    fkikSwitchCtrl = createCurveAndOffset(side, prefix, root);
 
-    newJointList = ["_fk_jnt", "_ik_jnt"];
+    newJointList = ["fk_jnt", "ik_jnt"];
     fkJointList =[];
     ikJointList = [];
     # create joint per mainJoints
@@ -533,52 +525,28 @@ def setupBiped(side, prefix, root, jointHierarchy):
 
         cmds.select(cl=True);
 
-    # setup fk and ik jnt to main jnt
-    connectMainJntToFKIK(fkikSwitchCtrlName, jointHierarchy);
+    connectMainJntToFKIK(fkikSwitchCtrl, jointHierarchy);
 
     # set up FK
-    # fk controller
+    # fk controler
     fkCtrlList = [];
     for i in range(armJointsNum):
         fkCtrlName = removeJntSuffix(jointHierarchy[i]) + "_fk_ctrl";
         ctrlAndOffset = createCurveAndOffset(0, fkCtrlName, jointHierarchy[i], 10);
-        cmds.orientConstraint(ctrlAndOffset[1], fkJointList[i]);
         fkCtrlList.append(ctrlAndOffset);
     # fk hierarchy
     createFkHierarchy(fkCtrlList);
-    
 
     # set up IK
-    # prepare ctrl
-    ikCtrlName = removeJntSuffix(prefix + "Ik_ctrl");
-    ikCtrlAndOffset = createCurveAndOffset(3, ikCtrlName, jointHierarchy[-1], 10);
     
-    # createIkhandle
-    ikHandle = str(cmds.ikHandle(n=prefix + "ikHandle", solver="ikRPsolver", sj=ikJointList[0], ee=ikJointList[-1])[0]);
-    cmds.parent(ikHandle, ikCtrlName);
+
     
-    # setup pv
-    pvCtrlName = removeJntSuffix(prefix + "Ik_pv_ctrl");
-    pvCtrlNameAndOffset = createCurveAndOffset(4, pvCtrlName, jointHierarchy[1], 10);
-    # adjustment pv position
-    cmds.delete(str(cmds.pointConstraint(jointHierarchy[0], jointHierarchy[2], pvCtrlNameAndOffset[0])[0]));
-    cmds.delete(str(cmds.aimConstraint(jointHierarchy[1], pvCtrlNameAndOffset[0])[0]));
-    cmds.poleVectorConstraint(pvCtrlName, ikHandle);
-    pvMoveNum = -10;
-    print(prefix);
-    if "leg" in prefix:
-        pvMoveNum = pvMoveNum * -1;
-        print("debug")
-    cmds.move(pvMoveNum, pvCtrlNameAndOffset[0], z=True);
+
+
     
-    # visibility setup
-    cmds.setAttr(fkJointList[0] + ".visibility", 0);
-    cmds.setAttr(ikJointList[0] + ".visibility", 0);
-    # fk vis
-    cmds.connectAttr(fkikSwitchCtrlAndOffset[2] + ".outputX", str(cmds.listRelatives(fkCtrlList[0], p=True)[0]) + ".visibility");
-    # ik vis
-    cmds.connectAttr(fkikSwitchCtrlName + ".FKIKSwitch", ikCtrlAndOffset[0] + ".visibility");
-    cmds.connectAttr(fkikSwitchCtrlName + ".FKIKSwitch", pvCtrlNameAndOffset[0] + ".visibility");
+
+def setupBipedLeg():
+    pass;
 
 
 # ------------------------------

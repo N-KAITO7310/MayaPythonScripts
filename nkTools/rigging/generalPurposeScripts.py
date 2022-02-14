@@ -147,7 +147,7 @@ for obj in selected:
     cmds.matchTransform(offsetGrp, obj, pos=True, rot=True, scl=True);
     cmds.parent(obj, offsetGrp);
     
-# create offset grp 
+# create offset grp withParenting
 selected = cmds.ls(sl=True);
 for obj in selected:
     obj = str(obj);
@@ -157,6 +157,13 @@ for obj in selected:
     cmds.matchTransform(offsetGrp, obj, pos=True, rot=True, scl=True);
     cmds.parent(offsetGrp, parentObj)
     cmds.parent(obj, offsetGrp);
+    
+# create offset grp world
+selected = cmds.ls(sl=True);
+for obj in selected:
+    obj = str(obj);
+    offsetGrp = cmds.group(em=True, n=obj + "_offset_grp");    
+    cmds.matchTransform(offsetGrp, obj, pos=True, rot=True, scl=True);
     
 # create jnt under joint 
 posList = cmds.ls(sl=True);
@@ -273,10 +280,6 @@ for jnt in joints:
     jnt = str(jnt);
     cmds.joint(jnt, e=True, zso=True);
 
-# implicit
-cmds.createNode("implicitCone");
-cmds.createNode("implicitSphere");
-
 # add a proxy attribute
 parentCtrlName = "l_arm_fkikSwitch_ctrl"
 cmds.addAttr(ln="IKFKSwitch", proxy="{0}.FKIKSWitch".format(parentCtrlName));
@@ -286,6 +289,10 @@ objs = cmds.ls(sl=True);
 for obj in objs:
     obj = str(obj);
     cmds.setAttr("{0}.overrideEnabled".format(obj), 1);
+    
+# implicit
+cmds.createNode("implicitCone");
+cmds.createNode("implicitSphere");
 
 # make dynamic
 """

@@ -88,7 +88,7 @@ def connectByMatrx():
         matrixInNum = matrixInNum + 1;
 
         if settings.existOffsetParentMatrix:
-            if driverSide in opmList:
+            if driverSide in opmList or driven in opmList:
                 cmds.connectAttr(driverSide + ".offsetParentMatrix",mult + ".matrixIn[{0}]".format(matrixInNum), f=True);
                 matrixInNum = matrixInNum + 1;
         
@@ -101,10 +101,16 @@ def connectByMatrx():
         if settings.existOffsetParentMatrix:
             if drivenSide in opmList:
                 # offsetParentMatrixの逆地をどうやって得るか？
-                tmpInverse = cmds.shadingNode("inverseMatrix", au=True, n=driverSide + "_offsetParentMatrixInverse");
+                tmpInverse = cmds.shadingNode("inverseMatrix", au=True, n=drivenSide + "_offsetParentMatrixInverse");
                 cmds.connectAttr(drivenSide + ".offsetParentMatrix",tmpInverse + ".inputMatrix", f=True);
                 cmds.connectAttr(tmpInverse + ".outputMatrix",mult + ".matrixIn[{0}]".format(matrixInNum), f=True);
                 matrixInNum = matrixInNum + 1;
+    # If the offsetParentMatrix is also applied to the driven itself
+    if settings.existOffsetParentMatrix:
+        if driven in opmList:
+            tmpInverse = cmds.shadingNode("inverseMatrix", au=True, n=driven + "_offsetParentMatrixInverse");
+            cmds.connectAttr(driven + ".offsetParentMatrix",tmpInverse + ".inputMatrix", f=True);
+            cmds.connectAttr(tmpInverse + ".outputMatrix",mult + ".matrixIn[{0}]".format(matrixInNum), f=True);
 
     # connect decompose
     cmds.connectAttr(mult + ".matrixSum",decompose + ".inputMatrix", f=True);
@@ -223,7 +229,7 @@ class OptionWidget(QtWidgets.QWidget):
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent);
-        self.setWindowTitle("ConnectByMatrixTool");
+        self.setWindowTitle("ConnectByMatrix");
         self.resize(500, 500);
 
         # qt.pyで設定したウィジェット(下部実行ボタン＆スクロールエリア)をウィンドウに設定

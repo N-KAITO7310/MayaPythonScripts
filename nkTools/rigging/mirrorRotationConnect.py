@@ -26,7 +26,7 @@ driven = str(cmds.ls(sl=True)[1]);
 driverSideNull = cmds.createNode("transform", n="{0}_driverSideNull".format(driver));
 
 # TODO:need to input axis by UI
-axisList = ["X"];#, "Y", "Z"
+axisList = ["X", "Y", "Z"];
 
 # driverSide to drivenSide
 cmds.setAttr("{0}.sx".format(driverSideNull), -1);
