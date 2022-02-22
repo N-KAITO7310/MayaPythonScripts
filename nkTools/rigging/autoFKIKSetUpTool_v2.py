@@ -471,7 +471,7 @@ def createFkHierarchy(fkAndOffsetList):
 def createFKIKSwitchCtrl(side, prefix, posObj):
     # FKIKSwitch
     fkikSwitchCtrlOffset = createCurveAndOffset(5, prefix + "fkikSwitch_ctrl", posObj, 10);
-    print(fkikSwitchCtrlOffset[0]);
+    cmds.setAttr("{}.rotate".format(fkikSwitchCtrlOffset[0]), 0, 0, 0, type="double3");
     cmds.move(10*side, 0, 0, fkikSwitchCtrlOffset[0], r=True, wd=True);
     cmds.addAttr(fkikSwitchCtrlOffset[1], ln="FKIKSwitch", at="double", min=0, max=1 ,dv=1);
     cmds.setAttr(fkikSwitchCtrlOffset[1] + ".FKIKSwitch", e=True, keyable=True);
