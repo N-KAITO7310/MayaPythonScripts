@@ -76,13 +76,15 @@ def connectByMatrx():
     driverSideMultTargetList.reverse();
     driverSideMultTargetList.insert(0, driver);
 
+    matrixInNum = 0;
     if not sameAxis:
         dup = cmds.duplicate(driven, po=True, n=driven + "_forMatrixCon")[0];
         cmds.setAttr(dup + ".visibility", 0);
         cmds.parent(dup, driver);
-        driverSideMultTargetList.insert(0, dup);
+        cmds.setAttr(mult + ".matrixIn[{0}]".format(matrixInNum), *cmds.getAttr(dup + ".matrix"), type="matrix")
+        matrixInNum += 1;
+        cmds.delete(dup);
 
-    matrixInNum = 0;
     for driverSide in driverSideMultTargetList:
         cmds.connectAttr(driverSide + ".matrix",mult + ".matrixIn[{0}]".format(matrixInNum), f=True);
         matrixInNum = matrixInNum + 1;
