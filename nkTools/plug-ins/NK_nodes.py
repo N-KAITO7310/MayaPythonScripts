@@ -2,32 +2,36 @@
 import maya.api.OpenMaya as om
 import maya.api.OpenMayaUI as omui
 import math, sys
+from decimal import Decimal, ROUND_HALF_UP, ROUND_HALF_EVEN
 
 # Maya API 2.0を使用するために必要な関数
 def maya_useNewAPI():
     pass
 
-# 実際のクラス
-class NK_Sin(om.MPxNode):
-    kPluginNodeTypeName = "NK_Sin";
+class NK_TFDriver(om.MPxNode):
+    kPluginNodeTypeName = "NK_TFDriver";
     
     kPluginNodeId = om.MTypeId(0x7f001);
     
     input1Attr = om.MObject()
-    kInput1AttrName = "timing";
+    kInput1AttrName = "ti";
     kInput1AttrLongName = "timing";
     
     input2Attr = om.MObject()
-    kInput2AttrName = "size";
+    kInput2AttrName = "si";
     kInput2AttrLongName = "size";
 
     input3Attr = om.MObject()
-    kInput3AttrName = "speed";
+    kInput3AttrName = "sp";
     kInput3AttrLongName = "speed";
 
     input4Attr = om.MObject()
-    kInput4AttrName = "offset";
+    kInput4AttrName = "of";
     kInput4AttrLongName = "offset";
+    
+    input5Attr = om.MObject()
+    kInput5AttrName = "op";
+    kInput5AttrLongName = "operation";
     
     output = om.MObject()
     kOutputAttrName = 'out'
@@ -36,7 +40,7 @@ class NK_Sin(om.MPxNode):
     # インスタンスを返すメソッド
     @staticmethod
     def creator():
-        return NK_Sin()
+        return NK_TFDriver()
 
     # 初期化時にMayaから呼ばれるメソッド
     # アトリビュートの設定を行う
@@ -44,46 +48,64 @@ class NK_Sin(om.MPxNode):
     def initialize():
         # アトリビュートはMFnAttributeクラスのサブクラスのcreateメソッドを使い定義する
         nAttr = om.MFnNumericAttribute()
-        NK_Sin.input1Attr = nAttr.create(
-            NK_Sin.kInput1AttrLongName, NK_Sin.kInput1AttrName, om.MFnNumericData.kDouble, 0.0)
+        
+        # input timing
+        NK_TFDriver.input1Attr = nAttr.create(
+            NK_TFDriver.kInput1AttrLongName, NK_TFDriver.kInput1AttrName, om.MFnNumericData.kDouble, 0.0)
         nAttr.storable = True
         nAttr.writable = True
         nAttr.keyable = True;
         
-        NK_Sin.input2Attr = nAttr.create(
-            NK_Sin.kInput2AttrLongName, NK_Sin.kInput2AttrName, om.MFnNumericData.kDouble, 0.0)
+        # input size
+        NK_TFDriver.input2Attr = nAttr.create(
+            NK_TFDriver.kInput2AttrLongName, NK_TFDriver.kInput2AttrName, om.MFnNumericData.kDouble, 0.0)
         nAttr.storable = True
         nAttr.writable = True
         nAttr.keyable = True;
         
-        NK_Sin.input3Attr = nAttr.create(
-            NK_Sin.kInput3AttrLongName, NK_Sin.kInput3AttrName, om.MFnNumericData.kDouble, 0.0)
+        # input speed
+        NK_TFDriver.input3Attr = nAttr.create(
+            NK_TFDriver.kInput3AttrLongName, NK_TFDriver.kInput3AttrName, om.MFnNumericData.kDouble, 0.0)
         nAttr.storable = True
         nAttr.writable = True
         nAttr.keyable = True;
         
-        NK_Sin.input4Attr = nAttr.create(
-            NK_Sin.kInput4AttrLongName, NK_Sin.kInput4AttrName, om.MFnNumericData.kDouble, 0.0)
+        # offset
+        NK_TFDriver.input4Attr = nAttr.create(
+            NK_TFDriver.kInput4AttrLongName, NK_TFDriver.kInput4AttrName, om.MFnNumericData.kDouble, 0.0)
         nAttr.storable = True
         nAttr.writable = True
         nAttr.keyable = True;
+        
+        # input operation
+        enumAttr = om.MFnEnumAttribute();
+        NK_TFDriver.input5Attr = enumAttr.create(
+            NK_TFDriver.kInput5AttrLongName, NK_TFDriver.kInput5AttrName
+        );
+        enumAttr.addField("Sin", 0);
+        enumAttr.addField("Cos", 1);
+        enumAttr.addField("Tan", 2);
+        enumAttr.writable = True;
+        enumAttr.keyable = True;
 
         nAttr = om.MFnNumericAttribute()
-        NK_Sin.output = nAttr.create(NK_Sin.kOutputAttrLongName, NK_Sin.kOutputAttrName, om.MFnNumericData.kDouble, 0.0)
+        NK_TFDriver.output = nAttr.create(NK_TFDriver.kOutputAttrLongName, NK_TFDriver.kOutputAttrName, om.MFnNumericData.kDouble, 0.0)
         nAttr.storable = False;
         nAttr.writable = False;
 
         # 定義した後はMPxNodeのaddAttributeを実行する
-        NK_Sin.addAttribute(NK_Sin.input1Attr)
-        NK_Sin.addAttribute(NK_Sin.input2Attr)
-        NK_Sin.addAttribute(NK_Sin.input3Attr)
-        NK_Sin.addAttribute(NK_Sin.input4Attr)
-        NK_Sin.addAttribute(NK_Sin.output)
+        NK_TFDriver.addAttribute(NK_TFDriver.input1Attr)
+        NK_TFDriver.addAttribute(NK_TFDriver.input2Attr)
+        NK_TFDriver.addAttribute(NK_TFDriver.input3Attr)
+        NK_TFDriver.addAttribute(NK_TFDriver.input4Attr)
+        NK_TFDriver.addAttribute(NK_TFDriver.input5Attr)
+        NK_TFDriver.addAttribute(NK_TFDriver.output)
         # また、inputが変更された際にoutputを再計算するように設定する
-        NK_Sin.attributeAffects( NK_Sin.input1Attr, NK_Sin.output)
-        NK_Sin.attributeAffects( NK_Sin.input2Attr, NK_Sin.output)
-        NK_Sin.attributeAffects( NK_Sin.input3Attr, NK_Sin.output)
-        NK_Sin.attributeAffects( NK_Sin.input4Attr, NK_Sin.output)
+        NK_TFDriver.attributeAffects( NK_TFDriver.input1Attr, NK_TFDriver.output)
+        NK_TFDriver.attributeAffects( NK_TFDriver.input2Attr, NK_TFDriver.output)
+        NK_TFDriver.attributeAffects( NK_TFDriver.input3Attr, NK_TFDriver.output)
+        NK_TFDriver.attributeAffects( NK_TFDriver.input4Attr, NK_TFDriver.output)
+        NK_TFDriver.attributeAffects( NK_TFDriver.input5Attr, NK_TFDriver.output)
 
     # コンストラクタは親のコンストラクタを呼ぶ
     def __init__(self):
@@ -91,26 +113,43 @@ class NK_Sin(om.MPxNode):
 
     # アトリビュートの値が計算される際にMayaから呼び出されるメソッド
     def compute(self, plug, dataBlock):
-        if(plug == NK_Sin.output):
+        if(plug == NK_TFDriver.output):
             # get the incoming data
             # timing
-            dataHandle = dataBlock.inputValue(NK_Sin.input1Attr)
+            dataHandle = dataBlock.inputValue(NK_TFDriver.input1Attr)
             timing = dataHandle.asDouble()
             # size
-            dataHandle = dataBlock.inputValue(NK_Sin.input2Attr)
+            dataHandle = dataBlock.inputValue(NK_TFDriver.input2Attr)
             size = dataHandle.asDouble()
             # speed
-            dataHandle = dataBlock.inputValue(NK_Sin.input3Attr)
+            dataHandle = dataBlock.inputValue(NK_TFDriver.input3Attr)
             speed = dataHandle.asDouble();
             # offset
-            dataHandle = dataBlock.inputValue(NK_Sin.input4Attr)
+            dataHandle = dataBlock.inputValue(NK_TFDriver.input4Attr)
             offset = dataHandle.asDouble();
-
-            # compute output sin
-            result = math.sin(timing * speed - offset) * size;
+            # operation
+            dataHandle = dataBlock.inputValue(NK_TFDriver.input5Attr);
+            operation = dataHandle.asInt();
+            
+            # fork output option by operation
+            result = None;
+            print(operation)
+            # compute output
+            if operation == 0:
+                print("sin")
+                result = math.sin(timing * speed - offset) * size;
+            elif operation == 1:
+                print("cos")
+                result = math.cos(timing * speed - offset) * size;
+            elif operation == 2:
+                print("tan")
+                result = math.tan(timing * speed - offset) * size;
+            else:
+                # default sin
+                result = math.sin(timing * speed - offset) * size;
             
             # set the outgoing plug
-            dataHandle = dataBlock.outputValue(NK_Sin.output)
+            dataHandle = dataBlock.outputValue(NK_TFDriver.output)
             dataHandle.setDouble(result)
             dataBlock.setClean(plug)
 
@@ -243,15 +282,223 @@ class NK_TSHDriver(om.MPxNode):
             dataBlock.setClean(plug);
             
 
+class NK_TransToRot(om.MPxNode):
+    """
+    input
+    translate:float3
+    diameter:float
+    operation:enum
+    
+    output
+    outputTranslate
+    outputRotate
+    """
+    kPluginNodeTypeName = "NK_TransToRot";
+    
+    kPluginNodeId = om.MTypeId(0x7f005);
+
+    # driver trans
+    input1Attr = om.MObject()
+    kInput1AttrName = "t";
+    kInput1AttrLongName = "inputTranslate";
+    
+    # diameter point1 trans
+    input2Attr = om.MObject()
+    kInput2AttrName = "p1";
+    kInput2AttrLongName = "point1";
+    
+    # diameter point2 trans
+    input3Attr = om.MObject()
+    kInput3AttrName = "p2";
+    kInput3AttrLongName = "point2";
+    
+    # operation
+    input4Attr = om.MObject()
+    kInput4AttrName = "o";
+    kInput4AttrLongName = "operation";
+    
+    # operation
+    input5Attr = om.MObject()
+    kInput5AttrName = "dr";
+    kInput5AttrLongName = "drivenRotation";
+    
+    # output Trans
+    output1 = om.MObject()
+    kOutput1AttrName = 'outTrans'
+    kOutput1AttrLongName = 'outputTranslate'
+    
+    # output Rot
+    output2 = om.MObject()
+    kOutput2AttrName = 'outRot'
+    kOutput2AttrLongName = 'outputRotate'
+    
+    kTempVector = om.MVector();
+    kTempRot = om.MEulerRotation();
+
+    # インスタンスを返すメソッド
+    @staticmethod
+    def creator():
+        return NK_TransToRot()
+
+    # 初期化時にMayaから呼ばれるメソッド
+    # アトリビュートの設定を行う
+    @staticmethod
+    def initialize():
+        # アトリビュートはMFnAttributeクラスのサブクラスのcreateメソッドを使い定義する
+        # input trans
+        nAttr = om.MFnNumericAttribute()
+        NK_TransToRot.input1Attr = nAttr.create(
+            NK_TransToRot.kInput1AttrLongName, NK_TransToRot.kInput1AttrName, om.MFnNumericData.k3Float, 0
+        );
+        nAttr.writable = True;
+        nAttr.keyable = True;
+        
+        # input point1
+        NK_TransToRot.input2Attr = nAttr.create(
+            NK_TransToRot.kInput2AttrLongName, NK_TransToRot.kInput2AttrName, om.MFnNumericData.k3Float, 0
+        );
+        nAttr.writable = True;
+        nAttr.keyable = True;
+        
+        # input point2
+        NK_TransToRot.input3Attr = nAttr.create(
+            NK_TransToRot.kInput3AttrLongName, NK_TransToRot.kInput3AttrName, om.MFnNumericData.k3Float, 0
+        );
+        nAttr.writable = True;
+        nAttr.keyable = True;
+        
+        # input operation
+        enumAttr = om.MFnEnumAttribute();
+        NK_TransToRot.input4Attr = enumAttr.create(
+            NK_TransToRot.kInput4AttrLongName, NK_TransToRot.kInput4AttrName
+        );
+        enumAttr.addField("XZ", 0);
+        enumAttr.addField("XY", 1);
+        enumAttr.addField("YZ", 2);
+        nAttr.writable = True;
+        nAttr.keyable = True;
+        
+        # input drivenRot
+        NK_TransToRot.input5Attr = nAttr.create(
+            NK_TransToRot.kInput5AttrLongName, NK_TransToRot.kInput5AttrName, om.MFnNumericData.k3Float, 0
+        );
+        nAttr.writable = True;
+        nAttr.keyable = True;
+        
+        # output trans
+        nAttr = om.MFnNumericAttribute()
+        NK_TransToRot.output1 = nAttr.create(NK_TransToRot.kOutput1AttrLongName, NK_TransToRot.kOutput1AttrName, om.MFnNumericData.k3Float, 0.0)
+        nAttr.storable = False;
+        nAttr.writable = False;
+        
+        # output rot
+        nAttr = om.MFnNumericAttribute()
+        NK_TransToRot.output2 = nAttr.create(NK_TransToRot.kOutput2AttrLongName, NK_TransToRot.kOutput2AttrName, om.MFnNumericData.k3Float, 0.0)
+        nAttr.storable = False;
+        nAttr.writable = False;
+
+        # 定義した後はMPxNodeのaddAttributeを実行する
+        NK_TransToRot.addAttribute(NK_TransToRot.input1Attr);
+        NK_TransToRot.addAttribute(NK_TransToRot.input2Attr);
+        NK_TransToRot.addAttribute(NK_TransToRot.input3Attr);
+        NK_TransToRot.addAttribute(NK_TransToRot.input4Attr);
+        NK_TransToRot.addAttribute(NK_TransToRot.input5Attr);
+        NK_TransToRot.addAttribute(NK_TransToRot.output1);
+        NK_TransToRot.addAttribute(NK_TransToRot.output2);
+        # また、inputが変更された際にoutputを再計算するように設定する
+        NK_TransToRot.attributeAffects( NK_TransToRot.input1Attr, NK_TransToRot.output1);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input2Attr, NK_TransToRot.output1);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input3Attr, NK_TransToRot.output1);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input4Attr, NK_TransToRot.output1);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input1Attr, NK_TransToRot.output2);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input2Attr, NK_TransToRot.output2);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input3Attr, NK_TransToRot.output2);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input4Attr, NK_TransToRot.output2);
+
+    # コンストラクタは親のコンストラクタを呼ぶ
+    def __init__(self):
+        om.MPxNode.__init__(self)
+    
+    @staticmethod
+    def clamp(num, min_value, max_value):
+            return max(min(num, max_value), min_value);
+    
+    # アトリビュートの値が計算される際にMayaから呼び出されるメソッド
+    def compute(self, plug, dataBlock):
+        if plug == NK_TransToRot.output1 or plug == NK_TransToRot.output2:
+            
+            # get the incoming data
+            # driver trans
+            dataHandle = dataBlock.inputValue(NK_TransToRot.input1Attr);
+            dTrans = dataHandle.asFloat3();
+            dVec = om.MVector(dTrans[0], dTrans[1], dTrans[2]);
+            
+            # driven rot
+            dataHandle = dataBlock.inputValue(NK_TransToRot.input5Attr);
+            drivenRot = dataHandle.asFloat3();
+            
+            # pos 1
+            dataHandle = dataBlock.inputValue(NK_TransToRot.input2Attr);
+            pos1 = dataHandle.asFloat3();
+            vec1 = om.MVector(pos1[0], pos1[1], pos1[2]);
+            
+            # pos 2
+            dataHandle = dataBlock.inputValue(NK_TransToRot.input3Attr);
+            pos2 = dataHandle.asFloat3();
+            vec2 = om.MVector(pos2[0], pos2[1], pos2[2]);
+            
+            # operation TODO:
+            dataHandle = dataBlock.inputValue(NK_TransToRot.input3Attr);
+            operation = dataHandle.asFloat();
+            
+            # culc diameter
+            subtract = vec1 - vec2;
+            diameter = abs(subtract.length());# length() = magnitude of this vector
+            
+            # driven Circumference length
+            drivenCircumlen = diameter * math.pi;
+            
+            # culc rot
+            driverDistVec = dVec - NK_TransToRot.kTempVector
+            driverDist = driverDistVec.length();
+            distRatio = driverDist / drivenCircumlen;
+            print(driverDist, distRatio, NK_TransToRot.kTempVector);
+            
+            rotRatio = 360 * distRatio;
+            rot = float(Decimal(str(rotRatio)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+            
+            newRot = om.MEulerRotation();
+            vec = driverDistVec.rotateBy(om.MEulerRotation(0, 90, 0))
+            euler = newRot.incrementalRotateBy(vec, rot);
+            
+            eulerList = [euler.x, euler.y, euler.z];
+            
+            newEuler = [0, 0, 0];
+            for i, new in enumerate(eulerList):
+                if drivenRot[i]  != new:
+                    newEuler[i] = new;
+                else:
+                    newEuler[i] = drivenRot[i];
+                    
+            
+            print(rotRatio, rot, newRot, euler.x, euler.y, euler.z);
+            
+            # set the outgoing plug
+            dataHandle1 = dataBlock.outputValue(NK_TransToRot.output1);
+            dataHandle1.set3Float(dTrans[0], dTrans[1], dTrans[2]);
+            dataHandle2 = dataBlock.outputValue(NK_TransToRot.output2);
+            dataHandle2.set3Float(newEuler[0], newEuler[1], newEuler[2]);
+            dataBlock.setClean(plug);
+
 # 新しいノードの登録を行うMayaから呼ばれる関数
 def initializePlugin(obj):
     mplugin = om.MFnPlugin(obj)
 
     try:
-        mplugin.registerNode('NK_Sin', NK_Sin.kPluginNodeId, NK_Sin.creator,
-                            NK_Sin.initialize, om.MPxNode.kDependNode);
+        mplugin.registerNode('NK_TFDriver', NK_TFDriver.kPluginNodeId, NK_TFDriver.creator,
+                            NK_TFDriver.initialize, om.MPxNode.kDependNode);
     except:
-        sys.stderr.write('Faled to register node: %s' % 'NK_Sin')
+        sys.stderr.write('Faled to register node: %s' % 'NK_TFDriver')
         raise
         
     try:
@@ -260,17 +507,29 @@ def initializePlugin(obj):
     except:
         sys.stderr.write('Faled to register node: %s' % 'NK_TSHDriver')
         raise
+        
+    try:
+        mplugin.registerNode("NK_TransToRot", NK_TransToRot.kPluginNodeId, NK_TransToRot.creator,
+                            NK_TransToRot.initialize, om.MPxNode.kDependNode);
+    except:
+        sys.stderr.write('Faled to register node: %s' % 'NK_TransToRot')
+        raise
 
 # プラグインを終了する際にMayaから呼ばれる関数
 def uninitializePlugin(mobject):
     mplugin = om.MFnPlugin(mobject)
     try:
-        mplugin.deregisterNode(NK_Sin.kPluginNodeId);
+        mplugin.deregisterNode(NK_TFDriver.kPluginNodeId);
     except:
-        sys.stderr.write('Faled to uninitialize node: %s' % 'NK_Sin')
+        sys.stderr.write('Faled to uninitialize node: %s' % 'NK_TFDriver')
         raise
     try:
         mplugin.deregisterNode(NK_TSHDriver.kPluginNodeId);
     except:
         sys.stderr.write('Faled to uninitialize node: %s' % 'NK_TSHDriver')
+        raise
+    try:
+        mplugin.deregisterNode(NK_TransToRot.kPluginNodeId);
+    except:
+        sys.stderr.write('Faled to uninitialize node: %s' % 'NK_TransToRot')
         raise

@@ -122,7 +122,7 @@ def connectByMatrx():
     elif settings.useAttr == 2:
         attrList = ["rotate"];
     else:
-        attrList = ["translate", "rotate", "scale"];# , "shear"
+        attrList = ["translate", "rotate", "scale", "shear"];
 
     for attr in attrList:
         cmds.connectAttr("{0}.output{1}".format(decompose, str.capitalize(attr)), "{0}.{1}".format(driven, attr), f=True);
