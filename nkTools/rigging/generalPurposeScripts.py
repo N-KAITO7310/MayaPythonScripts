@@ -390,5 +390,35 @@ for target in targets:
     cmds.setAttr("{}.floatB".format(fm), defaultAttr);
     cmds.connectAttr("{}.outFloat".format(fm), "{}.floatB".format(target));
 
-        
-
+# mothion path example like snake
+curve = "animate_curve"
+endLoc = "animate_curve_end_loc";
+curveInfo = "animate_curveInfo";
+sel = cmds.ls(sl=True)
+for i, default in enumerate(sel):
+    num = str(i + 26).zfill(2)
+    dist = cmds.createNode("distanceBetween", n="animate_curve_{}_dist".format(num));
+    cmds.connectAttr("{}.translate".format(endLoc), "{}.point1".format(dist))
+    cmds.connectAttr("{}.translate".format(default), "{}.point2".format(dist))
+    
+    ratioFM = cmds.createNode("floatMath", n="animate_curve_{}_distRatio_FM".format(num))
+    cmds.setAttr("{}.operation".format(ratioFM), 3)
+    cmds.connectAttr("{}.distance".format(dist), "{}.floatA".format(ratioFM))
+    cmds.connectAttr("{}.arcLength".format(curveInfo), "{}.floatB".format(ratioFM))
+    
+    reverseFM = cmds.createNode("floatMath", n="animate_curve_{}_distRatio_reverse_FM".format(num))
+    cmds.setAttr("{}.operation".format(reverseFM), 1)
+    cmds.connectAttr("{}.outFloat".format(ratioFM), "{}.floatB".format(reverseFM))
+    
+    controlFM = cmds.createNode("floatMath", n="animate_curve_{}_distRatio_control_FM".format(num))
+    cmds.setAttr("{}.floatB".format(controlFM), 0)
+    cmds.connectAttr("{}.outFloat".format(reverseFM), "{}.floatA".format(controlFM))
+    
+    driverLoc = "motionPath_driver_{}_loc".format(num)
+    mel.eval('pathAnimation -fractionMode true -follow true -followAxis x -upAxis y -worldUpType "vector" -worldUpVector 0 1 0 -inverseUp false -inverseFront false -bank false -startTimeU 1 -endTimeU 100 {} {};'.format(driverLoc, curve))
+    path = cmds.rename("motionPath{}".format(i+26), "motionPath_{}".format(num));
+    cmds.connectAttr("{}.outFloat".format(controlFM), "{}.uValue".format(path), f=True)
+      
+# browse maya img default resouce
+import maya.app.general.resourceBrowser as resourceBrowser;
+resourceBrowser.resourceBrowser().run();

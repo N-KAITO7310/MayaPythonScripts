@@ -117,7 +117,7 @@ def connectByMatrx():
     # connect decompose
     cmds.connectAttr(mult + ".matrixSum",decompose + ".inputMatrix", f=True);
 
-    # conntct driven
+    # connect driven
     attrList = [];
     if settings.useAttr == 1:
         attrList = ["translate"];
@@ -127,13 +127,23 @@ def connectByMatrx():
         attrList = ["translate", "rotate", "scale", "shear"];
 
     for attr in attrList:
-        cmds.connectAttr("{0}.output{1}".format(decompose, str.capitalize(attr)), "{0}.{1}".format(driven, attr), f=True);
-
-    # set joint orient 0
-    if cmds.objectType(driven) == "joint":
-        axisList = ["X", "Y", "Z"];
-        for axis in axisList:
-            cmds.setAttr(driven + ".jointOrient{0}".format(axis), 0);
+        if cmds.objectType(driven) == "joint" and attr == "rotate":
+            # create culiculate nodes
+            eulerToQuat = cmds.createNode("eulerToQuat", n="{}_eulerToQuat".format(driven));
+            quatInvert = cmds.createNode("quatInvert", n="{}_quatInvert".format(driven));
+            quatProd = cmds.createNode("quatProd", n="{}_quatProd".format(driven));
+            quatToEuler = cmds.createNode("quatToEuler", n="{}_quatToEuler".format(driven));
+            
+            # connect network
+            cmds.connectAttr("{}.jointOrient".format(driven), "{}.inputRotate".format(eulerToQuat));
+            cmds.connectAttr("{}.outputQuat".format(eulerToQuat), "{}.inputQuat".format(quatInvert));
+            cmds.connectAttr("{}.outputQuat".format(decompose), "{}.input1Quat".format(quatProd));
+            cmds.connectAttr("{}.outputQuat".format(quatInvert), "{}.input2Quat".format(quatProd));
+            cmds.connectAttr("{}.outputQuat".format(quatProd), "{}.inputQuat".format(quatToEuler));
+            cmds.connectAttr("{}.outputRotate".format(quatToEuler), "{}.rotate".format(driven));
+            pass;
+        else:
+            cmds.connectAttr("{0}.output{1}".format(decompose, str.capitalize(attr)), "{0}.{1}".format(driven, attr), f=True);q
 
     # apply
 def main():

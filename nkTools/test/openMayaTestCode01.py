@@ -137,3 +137,74 @@ ray_dir = cmds.getAttr("rayDirection.translate")[0] # レイを打つ方向、ra
 ray_dir = om.MVector(ray_dir) 
 hit_point, hit_u, hit_v = nurbs_srf.intersect(ray_source, ray_dir)
 cmds.setAttr("hit_point.translate", *list(hit_point)[:3]) # hit_pointというロケーターにセット
+
+
+
+# --------------------------------------------------------
+# ChrisZubrigg Tutorials
+# Learning Notes
+
+import maya.api.OpenMaya as om;
+
+# Maya Python API - Maya Python API 2.0
+transform_fn = om.MFnDagNode();
+transform_obj = transform_fn.create("transform", "pSphere1");
+
+mesh_fn = om.MFnDagNode();
+mesh_obj = mesh_fn.create("mesh", "pSphereShape1", transform_obj);
+
+sphere_fn = om.MFnDependencyNode();
+sphere_obj = sphere_fn.create("polySphere");
+
+src_plug = sphere_fn.findPlug("output", False);
+dest_plug = mesh_fn.findPlug("inMesh", False);
+
+dg_mod = om.MDGModifier();
+dg_mod.connect(src_plug, dest_plug);
+dg_mod.doIt();
+
+# plugin basics
+import maya.api.OpenMaya as om;
+import maya.cmds as cmds;
+
+def maya_useNewAPI():
+    pass;
+    
+def initializePlugin(plugin):
+    vendor = "Kaito Nakamura";
+    version = "1.0.0";
+    
+    om.MFnPlugin(plugin, vendor, version);
+    
+def uninitializePlugin(plugin):
+    pass;
+    
+if __name__ == "__main__":
+    plugin_name = "empty_plugin.py";
+    cmds.evalDeferred("if cmds.pluginInfo('{0}', q=True, loaded=True): cmds.unloadPlugin('{0}')".format(plugin_name));
+    cmds.evalDeferred("if not cmds.pluginInfo('{0}', q=True, loaded=True): cmds.loadPlugin('{0}')".format(plugin_name));
+
+# example MObject MFn Wrapper 
+import maya.api.OpenMaya as om;
+selection = om.MGlobal.getActiveSelectionList();
+for i in range(selection.length()):
+    if i > 0:
+        print("-----");
+    obj = selection.getDependNode(i);
+    print("API Type: {}".format(obj.apiTypeStr));
+    
+    if obj.hasFn(om.MFn.kDependencyNode):
+        depend_fn = om.MFnDependencyNode(obj);
+        print("Dependency Node: {}".format(depend_fn.name()));
+        
+        if obj.hasFn(om.MFn.kTransform):
+            transform_fn = om.MFnTransform(obj);
+            print("Translation: {}".format(transform_fn.translation(om.MSpace.kTransform)));
+        elif obj.hasFn(om.MFn.kMesh):
+            mesh_fn = om.MFnMesh(obj);
+            print("Mesh Vertices: {}".format(mesh_fn.getVertices()));
+        elif obj.hasFn(om.MFn.kCamera):
+            camera_fn = om.MFnCamera(obj);
+            print("Clipping Plane: {}, {}".format(camera_fn.nearClippingPlane, camera_fn.farClippingPlane));
+    
+
