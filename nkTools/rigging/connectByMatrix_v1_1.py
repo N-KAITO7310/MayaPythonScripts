@@ -143,7 +143,7 @@ def connectByMatrx():
             cmds.connectAttr("{}.outputRotate".format(quatToEuler), "{}.rotate".format(driven));
             pass;
         else:
-            cmds.connectAttr("{0}.output{1}".format(decompose, str.capitalize(attr)), "{0}.{1}".format(driven, attr), f=True);q
+            cmds.connectAttr("{0}.output{1}".format(decompose, str.capitalize(attr)), "{0}.{1}".format(driven, attr), f=True);
 
     # apply
 def main():

@@ -1,4 +1,4 @@
-N# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 
 Auto FK Ik SetUp Tool to Arm or Leg

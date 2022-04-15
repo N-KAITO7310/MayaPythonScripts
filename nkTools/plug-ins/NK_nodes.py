@@ -296,31 +296,31 @@ class NK_TransToRot(om.MPxNode):
     kPluginNodeTypeName = "NK_TransToRot";
     
     kPluginNodeId = om.MTypeId(0x7f005);
-
-    # driver trans
-    input1Attr = om.MObject()
-    kInput1AttrName = "t";
-    kInput1AttrLongName = "inputTranslate";
     
     # diameter point1 trans
-    input2Attr = om.MObject()
-    kInput2AttrName = "p1";
-    kInput2AttrLongName = "point1";
+    input1Attr = om.MObject()
+    kInput1AttrName = "p1";
+    kInput1AttrLongName = "point1";
     
     # diameter point2 trans
-    input3Attr = om.MObject()
-    kInput3AttrName = "p2";
-    kInput3AttrLongName = "point2";
+    input2Attr = om.MObject()
+    kInput2AttrName = "p2";
+    kInput2AttrLongName = "point2";
     
-    # operation
+    # input translate
+    input3Attr = om.MObject()
+    kInput3AttrName = "t";
+    kInput3AttrLongName = "translate";
+    
+    # input last translate
     input4Attr = om.MObject()
-    kInput4AttrName = "o";
-    kInput4AttrLongName = "operation";
+    kInput4AttrName = "lt";
+    kInput4AttrLongName = "lastTranslate";
     
     # operation
     input5Attr = om.MObject()
-    kInput5AttrName = "dr";
-    kInput5AttrLongName = "drivenRotation";
+    kInput5AttrName = "o";
+    kInput5AttrLongName = "operation";
     
     # output Trans
     output1 = om.MObject()
@@ -331,6 +331,11 @@ class NK_TransToRot(om.MPxNode):
     output2 = om.MObject()
     kOutput2AttrName = 'outRot'
     kOutput2AttrLongName = 'outputRotate'
+    
+    # output lastTranslate
+    output3 = om.MObject()
+    kOutput3AttrName = 'outLastTrans'
+    kOutput3AttrLongName = 'outputLastTranslate'
     
     kTempVector = om.MVector();
     kTempRot = om.MEulerRotation();
@@ -345,32 +350,39 @@ class NK_TransToRot(om.MPxNode):
     @staticmethod
     def initialize():
         # アトリビュートはMFnAttributeクラスのサブクラスのcreateメソッドを使い定義する
-        # input trans
-        nAttr = om.MFnNumericAttribute()
+        # input1 point1
         NK_TransToRot.input1Attr = nAttr.create(
             NK_TransToRot.kInput1AttrLongName, NK_TransToRot.kInput1AttrName, om.MFnNumericData.k3Float, 0
         );
         nAttr.writable = True;
         nAttr.keyable = True;
         
-        # input point1
+        # input2 point2
         NK_TransToRot.input2Attr = nAttr.create(
             NK_TransToRot.kInput2AttrLongName, NK_TransToRot.kInput2AttrName, om.MFnNumericData.k3Float, 0
         );
         nAttr.writable = True;
         nAttr.keyable = True;
         
-        # input point2
-        NK_TransToRot.input3Attr = nAttr.create(
+        # input3 driver translate
+        nAttr = om.MFnNumericAttribute()
+        NK_TransToRot.input1Attr = nAttr.create(
             NK_TransToRot.kInput3AttrLongName, NK_TransToRot.kInput3AttrName, om.MFnNumericData.k3Float, 0
         );
         nAttr.writable = True;
         nAttr.keyable = True;
         
-        # input operation
+        # input4 driver last translate
+        NK_TransToRot.input4Attr = nAttr.create(
+            NK_TransToRot.kInput4AttrLongName, NK_TransToRot.kInput4AttrName, om.MFnNumericData.k3Float, 0
+        );
+        nAttr.writable = True;
+        nAttr.keyable = True;
+        
+        # input5 operation
         enumAttr = om.MFnEnumAttribute();
-        NK_TransToRot.input4Attr = enumAttr.create(
-            NK_TransToRot.kInput4AttrLongName, NK_TransToRot.kInput4AttrName
+        NK_TransToRot.input5Attr = enumAttr.create(
+            NK_TransToRot.kInput5AttrLongName, NK_TransToRot.kInput5AttrName
         );
         enumAttr.addField("XZ", 0);
         enumAttr.addField("XY", 1);
@@ -378,25 +390,24 @@ class NK_TransToRot(om.MPxNode):
         nAttr.writable = True;
         nAttr.keyable = True;
         
-        # input drivenRot
-        NK_TransToRot.input5Attr = nAttr.create(
-            NK_TransToRot.kInput5AttrLongName, NK_TransToRot.kInput5AttrName, om.MFnNumericData.k3Float, 0
-        );
-        nAttr.writable = True;
-        nAttr.keyable = True;
-        
-        # output trans
+        # output1 trans
         nAttr = om.MFnNumericAttribute()
         NK_TransToRot.output1 = nAttr.create(NK_TransToRot.kOutput1AttrLongName, NK_TransToRot.kOutput1AttrName, om.MFnNumericData.k3Float, 0.0)
         nAttr.storable = False;
         nAttr.writable = False;
         
-        # output rot
+        # output2 rot
         nAttr = om.MFnNumericAttribute()
         NK_TransToRot.output2 = nAttr.create(NK_TransToRot.kOutput2AttrLongName, NK_TransToRot.kOutput2AttrName, om.MFnNumericData.k3Float, 0.0)
         nAttr.storable = False;
         nAttr.writable = False;
-
+        
+        # output3 last translate
+        nAttr = om.MFnNumericAttribute()
+        NK_TransToRot.output3 = nAttr.create(NK_TransToRot.kOutput3AttrLongName, NK_TransToRot.kOutput3AttrName, om.MFnNumericData.k3Float, 0.0)
+        nAttr.storable = False;
+        nAttr.writable = False;
+        
         # 定義した後はMPxNodeのaddAttributeを実行する
         NK_TransToRot.addAttribute(NK_TransToRot.input1Attr);
         NK_TransToRot.addAttribute(NK_TransToRot.input2Attr);
@@ -405,15 +416,24 @@ class NK_TransToRot(om.MPxNode):
         NK_TransToRot.addAttribute(NK_TransToRot.input5Attr);
         NK_TransToRot.addAttribute(NK_TransToRot.output1);
         NK_TransToRot.addAttribute(NK_TransToRot.output2);
+        NK_TransToRot.addAttribute(NK_TransToRot.output3);
         # また、inputが変更された際にoutputを再計算するように設定する
         NK_TransToRot.attributeAffects( NK_TransToRot.input1Attr, NK_TransToRot.output1);
         NK_TransToRot.attributeAffects( NK_TransToRot.input2Attr, NK_TransToRot.output1);
         NK_TransToRot.attributeAffects( NK_TransToRot.input3Attr, NK_TransToRot.output1);
         NK_TransToRot.attributeAffects( NK_TransToRot.input4Attr, NK_TransToRot.output1);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input5Attr, NK_TransToRot.output1);
         NK_TransToRot.attributeAffects( NK_TransToRot.input1Attr, NK_TransToRot.output2);
         NK_TransToRot.attributeAffects( NK_TransToRot.input2Attr, NK_TransToRot.output2);
         NK_TransToRot.attributeAffects( NK_TransToRot.input3Attr, NK_TransToRot.output2);
         NK_TransToRot.attributeAffects( NK_TransToRot.input4Attr, NK_TransToRot.output2);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input5Attr, NK_TransToRot.output2);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input1Attr, NK_TransToRot.output3);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input2Attr, NK_TransToRot.output3);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input3Attr, NK_TransToRot.output3);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input4Attr, NK_TransToRot.output3);
+        NK_TransToRot.attributeAffects( NK_TransToRot.input5Attr, NK_TransToRot.output3);
+
 
     # コンストラクタは親のコンストラクタを呼ぶ
     def __init__(self):
@@ -489,6 +509,50 @@ class NK_TransToRot(om.MPxNode):
             dataHandle2 = dataBlock.outputValue(NK_TransToRot.output2);
             dataHandle2.set3Float(newEuler[0], newEuler[1], newEuler[2]);
             dataBlock.setClean(plug);
+            
+            """
+            // 直径
+            float $diameter = 1;
+            // targetのY値
+            nurbsSphere1.translateY = $diameter * 0.5 + 0;
+            // driverの移動XZ
+            float $tx = wireController1.translateX;
+            float $tz = wireController1.translateZ;
+            if( frame <= 1 ){
+                float $rx = nurbsSphere1.startRotX;
+                float $ry = nurbsSphere1.startRotY;
+                float $rz = nurbsSphere1.startRotZ;
+                setAttr nurbsSphere1.rx $rx;
+                setAttr nurbsSphere1.ry $ry;
+                setAttr nurbsSphere1.rz $rz;
+               nurbsSphere1.lastX = $tx;
+               nurbsSphere1.lastZ = $tz;
+            } else {
+                // get driver last translate x z
+                float $lx = `getAttr "nurbsSphere1.ltx"`;
+                float $lz = `getAttr "nurbsSphere1.ltz"`;
+                // subtract translate - lastTranslate
+                float $x = $tx-$lx;
+                float $z = $tz-$lz;
+                // squar root = distance(vector norm
+                float $d = sqrt($x * $x + $z*$z);
+                if( $d > 0.00001 ){
+                    $x /= $d;
+                    $z /= $d;
+                    // 円周
+                    float $piD = 3.14 * $diameter;
+                    //　距離と円周の比率から回転値を計算
+                    float $xrot = 360.0 * $d/$piD;
+                    // 底辺、高さからタンジェントの逆関数を利用し、ラジアンを角度に変換
+                    float $yrot =  rad_to_deg( atan2( $x, $z ));
+                      rotate -ws -r 0 (-$yrot) 0 nurbsSphere1;
+                      rotate -ws -r ($xrot) 0 0 nurbsSphere1;
+                      rotate -ws -r 0 ($yrot) 0 nurbsSphere1;
+                    nurbsSphere1.lastX = $tx;
+                    nurbsSphere1.lastZ = $tz;
+                }
+            }
+            """
 
 # 新しいノードの登録を行うMayaから呼ばれる関数
 def initializePlugin(obj):

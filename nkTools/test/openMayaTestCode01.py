@@ -184,7 +184,7 @@ if __name__ == "__main__":
     cmds.evalDeferred("if cmds.pluginInfo('{0}', q=True, loaded=True): cmds.unloadPlugin('{0}')".format(plugin_name));
     cmds.evalDeferred("if not cmds.pluginInfo('{0}', q=True, loaded=True): cmds.loadPlugin('{0}')".format(plugin_name));
 
-# example MObject MFn Wrapper 
+# example MObject MFn: specfic objType, MFn enable attach
 import maya.api.OpenMaya as om;
 selection = om.MGlobal.getActiveSelectionList();
 for i in range(selection.length()):
