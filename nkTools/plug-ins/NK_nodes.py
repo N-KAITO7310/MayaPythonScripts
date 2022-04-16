@@ -387,8 +387,8 @@ class NK_TransToRot(om.MPxNode):
         enumAttr.addField("XZ", 0);
         enumAttr.addField("XY", 1);
         enumAttr.addField("YZ", 2);
-        nAttr.writable = True;
-        nAttr.keyable = True;
+        enumAttr.writable = True;
+        enumAttr.keyable = True;
         
         # output1 trans
         nAttr = om.MFnNumericAttribute()
@@ -556,7 +556,11 @@ class NK_TransToRot(om.MPxNode):
 
 # 新しいノードの登録を行うMayaから呼ばれる関数
 def initializePlugin(obj):
-    mplugin = om.MFnPlugin(obj)
+    
+    vendor = "Kaito Nakamura";
+    version = "1.0.0";
+    
+    mplugin = om.MFnPlugin(obj, vendor, version);
 
     try:
         mplugin.registerNode('NK_TFDriver', NK_TFDriver.kPluginNodeId, NK_TFDriver.creator,
