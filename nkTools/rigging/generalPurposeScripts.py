@@ -299,6 +299,21 @@ cmds.parent(shape, target, add=True, s=True);
 cmds.delete(targetOriginalShape);
 cmds.delete(offset);
 
+# copy shape to each ctrls
+origCtrl = cmds.ls(sl=True)[0];
+targetCtrlList = cmds.ls(sl=True)[1:];
+for targetCtrl in targetCtrlList:
+    dupCtrl = cmds.duplicate(origCtrl, rc=True)[0];
+    cmds.matchTransform(dupCtrl, targetCtrl);
+    
+    shape = cmds.listRelatives(dupCtrl, s=True)[0];
+    targetCtrlShape = cmds.listRelatives(targetCtrl, s=True)[0];
+    
+    cmds.parent(shape, targetCtrl, s=True, add=True)
+    cmds.delete(targetCtrlShape);
+    cmds.delete(dupCtrl);
+
+
 # for gameEngine:reset joint rotate axis offset
 joints = cmds.ls(sl=True);
 for jnt in joints:
@@ -314,6 +329,27 @@ objs = cmds.ls(sl=True);
 for obj in objs:
     obj = str(obj);
     cmds.setAttr("{0}.overrideEnabled".format(obj), 1);
+   
+# culc pole vec ctrl
+pointA = om.MVector(cmds.xform("IK_shoulder_Jnt", q=1, ws=1, t=1));
+pointB = om.MVector(cmds.xform("IK_elbow_Jnt", q=1, ws=1, t=1));
+pointC = om.MVector(cmds.xform("IK_wrist_Jnt", q=1, ws=1, t=1));
+
+# vec length
+AB = pointB - pointA;
+AC = pointC - pointA;
+
+ACNormalize = AC.normalize();
+projLength = AB * ACNormalize;
+
+proj_vec = (ACNormalize * projLength) + pointA;
+
+PB = pointB - proj_vec;
+PBNorm = PB.normalize();
+
+result = pointB + (PBNorm * 5);
+
+cmds.xform("IK_PV_Ctrl_Offset_Grp", t=result);   
     
 # implicit
 cmds.createNode("implicitCone");
