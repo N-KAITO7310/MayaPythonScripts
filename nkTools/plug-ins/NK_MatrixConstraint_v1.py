@@ -1,5 +1,7 @@
 import maya.api.OpenMaya as om;
 import maya.cmds as cmds;
+import math;
+import logging;
 
 def maya_useNewAPI():
     pass;
@@ -9,20 +11,24 @@ class NK_MatrixConstraint(om.MPxNode):
     TYPE_ID = om.MTypeId(0x0007f7f7);
     
     input1Attr = om.MObject()
-    kInput1AttrName = "m";
-    kInput1AttrLongName = "matrix";
+    kInput1AttrName = "d";
+    kInput1AttrLongName = "driver";
     
     input2Attr = om.MObject()
-    kInput2AttrName = "dm";
-    kInput2AttrLongName = "drivenMatrix";
+    kInput2AttrName = "dn";
+    kInput2AttrLongName = "driven";
 
     input3Attr = om.MObject()
-    kInput3AttrName = "o";
-    kInput3AttrLongName = "operation";
+    kInput3AttrName = "m";
+    kInput3AttrLongName = "matrix";
 
     input4Attr = om.MObject()
-    kInput4AttrName = "b";
-    kInput4AttrLongName = "blender";
+    kInput4AttrName = "o";
+    kInput4AttrLongName = "operation";
+
+    input5Attr = om.MObject()
+    kInput5AttrName = "b";
+    kInput5AttrLongName = "blender";
     
     outTranslate = om.MObject()
     kOutTranslateAttrName = 'ot'
@@ -40,9 +46,11 @@ class NK_MatrixConstraint(om.MPxNode):
     kOutShearAttrName = 'osh'
     kOutShearAttrLongName = 'outShear'
     
-    driver_default_worldMatrix = None;
-    driven_default_worldMatrix = None;
-    offset_matrix = None;
+    DRIVER_DEFAULT_WORLDMATRIX = None;
+    DRIVEN_DEFAULT_WORLDMATRIX = None;
+    OFFSET_MATRIX = None;
+    DRIVEN_OBJTYPE = "";
+    JOINT_ORIENTATION_MATRIX = None;
     
     def __init__(self):
         super(NK_MatrixConstraint, self).__init__();
@@ -53,46 +61,53 @@ class NK_MatrixConstraint(om.MPxNode):
         
     @classmethod
     def initialize(cls):
-        # input Driver Matrix
-        mAttr = om.MFnMatrixAttribute();
+        # input Driver
+        mAttr = om.MFnMessageAttribute()
         NK_MatrixConstraint.input1Attr = mAttr.create(
             NK_MatrixConstraint.kInput1AttrLongName,
-            NK_MatrixConstraint.kInput1AttrName,
-            om.MFnMatrixAttribute.kDouble
+            NK_MatrixConstraint.kInput1AttrName
         );
         mAttr.writable = True;
         mAttr.readable = False;
-        mAttr.keyable = True;
+        mAttr.keyable = False;
         
-        # input Driven Matrix
-        mAttr = om.MFnMatrixAttribute();
+        # input Driven
+        mAttr = om.MFnMessageAttribute()
         NK_MatrixConstraint.input2Attr = mAttr.create(
             NK_MatrixConstraint.kInput2AttrLongName,
-            NK_MatrixConstraint.kInput2AttrName,
-            om.MFnMatrixAttribute.kDouble
+            NK_MatrixConstraint.kInput2AttrName
         );
         mAttr.writable = True;
         mAttr.readable = False;
-        mAttr.keyable = True;
+        mAttr.keyable = False;
+        
+        # input Driver Matrix
+        mAttr = om.MFnMatrixAttribute()
+        NK_MatrixConstraint.input3Attr = mAttr.create(
+            NK_MatrixConstraint.kInput3AttrLongName,
+            NK_MatrixConstraint.kInput3AttrName
+        );
+        mAttr.writable = True;
+        mAttr.readable = False;
+        mAttr.keyable = False;
         
         # input Operation
         enumAttr = om.MFnEnumAttribute();
-        NK_MatrixConstraint.input3Attr = enumAttr.create(
-            NK_MatrixConstraint.kInput3AttrLongName,
-            NK_MatrixConstraint.kInput3AttrName,
+        NK_MatrixConstraint.input4Attr = enumAttr.create(
+            NK_MatrixConstraint.kInput4AttrLongName,
+            NK_MatrixConstraint.kInput4AttrName,
+            1
         )
-        enumAttr.addField("Parent", 0);
-        enumAttr.addField("Translate", 1);
-        enumAttr.addField("Rotate", 2);
-        enumAttr.addField("Scale", 3);
+        enumAttr.addField("offset", 0);
+        enumAttr.addField("no offset", 1);
         enumAttr.writable = True;
         enumAttr.keyable = True;
         
         # input blender
         nAttr = om.MFnNumericAttribute();
-        NK_MatrixConstraint.input4Attr = nAttr.create(
-            NK_MatrixConstraint.kInput4AttrLongName,
-            NK_MatrixConstraint.kInput4AttrName,
+        NK_MatrixConstraint.input5Attr = nAttr.create(
+            NK_MatrixConstraint.kInput5AttrLongName,
+            NK_MatrixConstraint.kInput5AttrName,
             om.MFnNumericData.k3Float,
             0.0
         );
@@ -114,7 +129,7 @@ class NK_MatrixConstraint(om.MPxNode):
         NK_MatrixConstraint.outRotate = nAttr.create(
             NK_MatrixConstraint.kOutRotateAttrLongName,
             NK_MatrixConstraint.kOutRotateAttrName,
-            om.MFnNumericData.k3Double,
+            om.MFnNumericData.k3Float,
             0.0
         );
         nAttr.storable = False;
@@ -149,6 +164,7 @@ class NK_MatrixConstraint(om.MPxNode):
         NK_MatrixConstraint.addAttribute(NK_MatrixConstraint.input2Attr);
         NK_MatrixConstraint.addAttribute(NK_MatrixConstraint.input3Attr);
         NK_MatrixConstraint.addAttribute(NK_MatrixConstraint.input4Attr);
+        NK_MatrixConstraint.addAttribute(NK_MatrixConstraint.input5Attr);
         NK_MatrixConstraint.addAttribute(NK_MatrixConstraint.outTranslate);
         NK_MatrixConstraint.addAttribute(NK_MatrixConstraint.outRotate);
         NK_MatrixConstraint.addAttribute(NK_MatrixConstraint.outScale);
@@ -175,24 +191,23 @@ class NK_MatrixConstraint(om.MPxNode):
         NK_MatrixConstraint.attributeAffects( NK_MatrixConstraint.input4Attr, NK_MatrixConstraint.outScale);
         NK_MatrixConstraint.attributeAffects( NK_MatrixConstraint.input4Attr, NK_MatrixConstraint.outShear);
         
+        NK_MatrixConstraint.attributeAffects( NK_MatrixConstraint.input5Attr, NK_MatrixConstraint.outTranslate);
+        NK_MatrixConstraint.attributeAffects( NK_MatrixConstraint.input5Attr, NK_MatrixConstraint.outRotate);
+        NK_MatrixConstraint.attributeAffects( NK_MatrixConstraint.input5Attr, NK_MatrixConstraint.outScale);
+        NK_MatrixConstraint.attributeAffects( NK_MatrixConstraint.input5Attr, NK_MatrixConstraint.outShear);
+        
     def compute(self, plug, dataBlock):
         if plug == NK_MatrixConstraint.outTranslate or plug == NK_MatrixConstraint.outRotate or plug == NK_MatrixConstraint.outScale or plug == NK_MatrixConstraint.outShear:
-            # driver matrix
-            dataHandle = dataBlock.inputValue(NK_MatrixConstraint.input1Attr);
+            # get input Data
+            dataHandle = dataBlock.inputValue(NK_MatrixConstraint.input3Attr)
             driverMatrix = dataHandle.asMatrix();
-            # print(driverMatrix)
-            
-            # driven matrix
-            dataHandle = dataBlock.inputValue(NK_MatrixConstraint.input2Attr);
-            drivenMatrix = dataHandle.asMatrix();
-            # print(drivenMatrix)
             
             # operation
-            dataHandle = dataBlock.inputValue(NK_MatrixConstraint.input3Attr);
+            dataHandle = dataBlock.inputValue(NK_MatrixConstraint.input4Attr);
             operation = dataHandle.asFloat();
             
             # blender
-            dataHandle = dataBlock.inputValue(NK_MatrixConstraint.input4Attr);
+            dataHandle = dataBlock.inputValue(NK_MatrixConstraint.input5Attr);
             blender = dataHandle.asFloat();
             
             # culc
@@ -208,6 +223,7 @@ class NK_MatrixConstraint(om.MPxNode):
             5. get each attr
             """
             
+            # convert self to MFnDependencyNode
             selfName = self.name();
             # print(selfName)
             selection_list = om.MSelectionList();
@@ -215,21 +231,42 @@ class NK_MatrixConstraint(om.MPxNode):
             self_mobject = selection_list.getDependNode(0);
             self_depend_fn = om.MFnDependencyNode(self_mobject);
             
-            # get driver
-            self_matrix_plug = self_depend_fn.findPlug("matrix", False);
-            self_matrix_plug_source = self_matrix_plug.source();
-            self_matrix_plug_source_mo = self_matrix_plug_source.node();
-            self_matrix_plug_source_dag = om.MFnDagNode(self_matrix_plug_source_mo);
+            # get driver obj fullPath
+            try:
+                self_matrix_plug = self_depend_fn.findPlug("driver", False);
+                self_matrix_plug_source = self_matrix_plug.source();
+                self_matrix_plug_source_mo = self_matrix_plug_source.node();
+                self_matrix_plug_source_dag = om.MFnDagNode(self_matrix_plug_source_mo);
+            except Exception as e:
+                print("Please Connect Driver")
+                logging.error(e);
+                
             # print(self_matrix_plug_source_dag.fullPathName());
             driver_fullPath = self_matrix_plug_source_dag.fullPathName();
             
-            # get driven
-            self_driven_matrix_plug = self_depend_fn.findPlug("drivenMatrix", False);
-            self_driven_matrix_plug_source = self_driven_matrix_plug.source();
-            self_driven_matrix_plug_source_mo = self_driven_matrix_plug_source.node();
+            try:
+                # check driven connection
+                self_driven_matrix_plug = self_depend_fn.findPlug("driven", False);
+                self_driven_matrix_plug_dst = self_driven_matrix_plug.source();
+            except Exception as e:
+                print("Please Connect Driven");
+                logging.error(e);
+            
+            # get driven obj fullPath
+            self_driven_matrix_plug_source_mo = self_driven_matrix_plug_dst.node();
             self_driven_matrix_plug_source_dag = om.MFnDagNode(self_driven_matrix_plug_source_mo);
             # print(self_driven_matrix_plug_source_dag.fullPathName());
             driven_fullPath = self_driven_matrix_plug_source_dag.fullPathName();
+            self.DRIVEN_OBJTYPE = cmds.objectType(self_driven_matrix_plug_source_dag.partialPathName());
+            # get jointOrientRatation and convert matrix
+            if self.DRIVEN_OBJTYPE == "joint" and self.JOINT_ORIENTATION_MATRIX is None:
+                jointOrientation = cmds.getAttr("{}.jointOrient".format(self_driven_matrix_plug_source_dag.partialPathName()));
+                tempNode = cmds.createNode("composeMatrix");
+                cmds.setAttr("{}.inputRotate".format(tempNode), * jointOrientation[0]);
+                
+                self.JOINT_ORIENTATION_MATRIX = om.MTransformationMatrix(om.MMatrix(cmds.getAttr("{}.outputMatrix".format(tempNode))));
+                
+                cmds.delete(tempNode);
             
             # constract hierarchy list
             driver_hierarchy_list = driver_fullPath.split("|")[1:];
@@ -261,30 +298,33 @@ class NK_MatrixConstraint(om.MPxNode):
             
             # print(driver_mult_targets, driven_mult_targets)
             
-            # compare worldMatrix
-            if self.driver_default_worldMatrix is None and self.driven_default_worldMatrix is None:
-                driver_mdagPath = self_matrix_plug_source_dag.getPath();
-                driven_mdgPath = self_driven_matrix_plug_source_dag.getPath();
-                self.driver_default_worldMatrix = driver_mdagPath.inclusiveMatrix();
-                self.driven_default_worldMatrix = driven_mdgPath.inclusiveMatrix();
-                # print(driver_world_matrix, driven_world_matrix)
-            
-            sameWorldMatrix = False;
-            if self.driver_default_worldMatrix == self.driven_default_worldMatrix:
-                sameWorldMatrix = True;
+            # sameWorldMatrix = False;
+            # if self.DRIVER_DEFAULT_WORLDMATRIX == self.DRIVEN_DEFAULT_WORLDMATRIX:
+            #     sameWorldMatrix = True;
             
             # mult matrix
             driver_target_matrix_list = [];
             driven_target_inverseMatrix_list = [];
             
             # Whether it is the same matrix
-            if not sameWorldMatrix:
+            if operation == 0:
+                # compare worldMatrix
+                if self.DRIVER_DEFAULT_WORLDMATRIX is None:
+                    driver_mdagPath = self_matrix_plug_source_dag.getPath();
+                    self.DRIVER_DEFAULT_WORLDMATRIX = driver_mdagPath.inclusiveMatrix();
+                    
+                    # print(driver_world_matrix, driven_world_matrix)
+                
+                if self.DRIVEN_DEFAULT_WORLDMATRIX is None:
+                    driven_mdgPath = self_driven_matrix_plug_source_dag.getPath();
+                    self.DRIVEN_DEFAULT_WORLDMATRIX = driven_mdgPath.inclusiveMatrix();
+                
                 # add offset matrix
-                if self.offset_matrix is None:
-                    self.offset_matrix = self.driven_default_worldMatrix * self.driver_default_worldMatrix.inverse();
-                    driver_target_matrix_list.append(self.offset_matrix);
+                if self.OFFSET_MATRIX is None:
+                    self.OFFSET_MATRIX = self.DRIVEN_DEFAULT_WORLDMATRIX * self.DRIVER_DEFAULT_WORLDMATRIX.inverse();
+                    driver_target_matrix_list.append(self.OFFSET_MATRIX);
                 else:
-                    driver_target_matrix_list.append(self.offset_matrix)
+                    driver_target_matrix_list.append(self.OFFSET_MATRIX);
                 
             # driverTargetList reverse
             if len(driver_mult_targets) > 0:
@@ -317,29 +357,41 @@ class NK_MatrixConstraint(om.MPxNode):
                 
             # print("result_matrix: {}".format(result_matrix))
             
-            # joint orient
-            # drivenObjType = cmds.objectType(self_driven_matrix_plug_source_dag.partialPathName());
-            # if drivenObjType == "joint":
-            #     jointOrient = cmds.getAttr("{}.jointOrient".format(self_driven_matrix_plug_source_dag.partialPathName()));
-            #     jointOrientEuler = om.MEulerRotation(*jointOrient);
-            #     print(jointOrientEuler)
-            
             # get transform attr
             transformMatrix = om.MTransformationMatrix(result_matrix);
             translation = transformMatrix.translation(om.MSpace.kTransform);
-            rotation = transformMatrix.rotation(False);
+            
+            # get rotation
+            # take measures joint orient
+            if self.DRIVEN_OBJTYPE == "joint":
+                jntRotQuat = self.JOINT_ORIENTATION_MATRIX.rotation(True);
+                jntRotQuatInverse = jntRotQuat.inverse();
+                
+                rotationQuat = transformMatrix.rotation(True);
+                
+                quatProdResult = jntRotQuatInverse * rotationQuat;
+                newRot = quatProdResult.asEulerRotation();
+                eulerRotation = map(math.degrees, newRot);
+                
+                # print("converted:", newRot);
+                # print("converted:", map(math.degrees, eulerRotation))
+            else:
+                rotation = transformMatrix.rotation(False);
+                eulerRotation = map(math.degrees, rotation);
+            
+            # get scale and shear
             scale = transformMatrix.scale(om.MSpace.kTransform);
             shear = transformMatrix.shear(om.MSpace.kTransform);
             
             # print(translation[0], translation[1], translation[2]);
-            # print(rotation.x, rotation.y, rotation.z);
+            # print(eulerRotation[0], eulerRotation[1], eulerRotation[2]);
             
             # set output
             outDataHandle = dataBlock.outputValue(NK_MatrixConstraint.outTranslate);
             outDataHandle.set3Float(translation[0], translation[1], translation[2])
             
             outDataHandle = dataBlock.outputValue(NK_MatrixConstraint.outRotate);
-            outDataHandle.set3Float(rotation.x, rotation.y, rotation.z);
+            outDataHandle.set3Float(eulerRotation[0], eulerRotation[1], eulerRotation[2]);
             
             outDataHandle = dataBlock.outputValue(NK_MatrixConstraint.outScale);
             outDataHandle.set3Float(scale[0], scale[1], scale[2]);
@@ -381,13 +433,11 @@ if __name__ == "__main__":
     cmds.evalDeferred("if cmds.pluginInfo('{0}', q=True, loaded=True): cmds.unloadPlugin('{0}')".format(plugin_name));
     cmds.evalDeferred("if not cmds.pluginInfo('{0}', q=True, loaded=True): cmds.loadPlugin('{0}')".format(plugin_name));
 
-    cmds.evalDeferred('cmds.file("C:\Users\kn_un\Documents\maya\projects\scriptTest\scenes/MatrixConstraintNode_test06.mb", open=True, force=True)')
-    cmds.evalDeferred("cmds.createNode('NK_MatrixConstraint')");
-    cmds.evalDeferred('cmds.connectAttr("withOffset_driver.matrix", "NK_MatrixConstraint1.matrix");')
+    cmds.evalDeferred('cmds.file("C:\Users\kn_un\Documents\maya\projects\scriptTest\scenes/MatrixConstraintNode_test09.mb", open=True, force=True)')
+    # cmds.evalDeferred("cmds.createNode('NK_MatrixConstraint')");
+    # cmds.evalDeferred('cmds.connectAttr("withOffset_driver.matrix", "NK_MatrixConstraint5.matrix");')
     
-    cmds.evalDeferred('cmds.connectAttr("withOffset_driven.worldMatrix", "NK_MatrixConstraint1.drivenMatrix");')
-    
-    cmds.evalDeferred('cmds.connectAttr("NK_MatrixConstraint1.outTranslate", "withOffset_driven.translate");')
-    cmds.evalDeferred('cmds.connectAttr("NK_MatrixConstraint1.outRotate", "withOffset_driven.rotate");')
-    cmds.evalDeferred('cmds.connectAttr("NK_MatrixConstraint1.outScale", "withOffset_driven.scale");')
-    cmds.evalDeferred('cmds.connectAttr("NK_MatrixConstraint1.outShear", "withOffset_driven.shear");')
+    # cmds.evalDeferred('cmds.connectAttr("NK_MatrixConstraint1.outTranslate", "withOffset_driven.translate");')
+    # cmds.evalDeferred('cmds.connectAttr("NK_MatrixConstraint1.outRotate", "withOffset_driven.rotate");')
+    # cmds.evalDeferred('cmds.connectAttr("NK_MatrixConstraint1.outScale", "withOffset_driven.scale");')
+    # cmds.evalDeferred('cmds.connectAttr("NK_MatrixConstraint1.outShear", "withOffset_driven.shear");')

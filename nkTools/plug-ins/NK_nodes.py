@@ -349,6 +349,7 @@ class NK_TransToRot(om.MPxNode):
     # アトリビュートの設定を行う
     @staticmethod
     def initialize():
+        nAttr = om.MFnNumericAttribute();
         # アトリビュートはMFnAttributeクラスのサブクラスのcreateメソッドを使い定義する
         # input1 point1
         NK_TransToRot.input1Attr = nAttr.create(
@@ -366,7 +367,7 @@ class NK_TransToRot(om.MPxNode):
         
         # input3 driver translate
         nAttr = om.MFnNumericAttribute()
-        NK_TransToRot.input1Attr = nAttr.create(
+        NK_TransToRot.input3Attr = nAttr.create(
             NK_TransToRot.kInput3AttrLongName, NK_TransToRot.kInput3AttrName, om.MFnNumericData.k3Float, 0
         );
         nAttr.writable = True;
