@@ -458,3 +458,62 @@ for i, default in enumerate(sel):
 # browse maya img default resouce
 import maya.app.general.resourceBrowser as resourceBrowser;
 resourceBrowser.resourceBrowser().run();
+
+# SkinTransfer Python
+def objectSel():
+    if len(cmds.ls(sl=True)) < 2:
+        return False;
+    else:
+        objects = cmds.listRelatives(s=True);
+        shapehistory = cmds.listHistory(objects[0], lv=3);
+        skc = cmds.ls(shapehistory, typ="skinCluster");
+        target = cmds.ls(sl=True)[-1];
+        assignSkc(skc, target);
+        return True;
+
+    
+def assignSkc(skc, target):
+    shapeHistory = cmds.listHistory(target, lv=3);
+    oldSkc = cmds.ls(shapeHistory, typ="skinCluster");
+    if oldSkc:
+        cmds.delete(oldSkc);
+        
+    jnt = cmds.skinCluster(skc, weightedInfluence=True, q=True);
+    newSkc = cmds.skinCluster(jnt, target);
+    cmds.copySkinWeights(ss=sck[0], ds=newSkc[0], nm=True, surfaceAssociation="closestPoint");
+    cmds.rename(newSkc, skc[0]);
+
+    return newSkc;
+    
+objectSel();
+
+"""
+constraint mesh by closestPoint and Follicle
+"""
+# first select constrained then geo
+sl = cmds.ls(sl=True);
+
+closest = cmds.createNode("closestPointOnMesh");
+cmds.connectAttr(sl[1] + ".outMesh", closest + ".inMesh");
+
+trans = cmds.xform(sl[0], t=True, q=True);
+cmds.setAttr(closest + ".inPositionX", trans[0]);
+cmds.setAttr(closest + ".inPositionY", trans[1]);
+cmds.setAttr(closest + ".inPositionZ", trans[2]);
+
+follicle = cmds.createNode("follicle");
+follicleTrans = cmds.listRelatives(follicle, type="transform", p=True);
+cmds.connectAttr(follicle + ".outRotate", follicleTrans[0] + ".rotate");
+cmds.connectAttr(follicle + ".outTranslate", follicleTrans[0] + ".translate");
+
+cmds.connectAttr(sl[1] + ".worldMatrix", follicle + ".inputWorldMatrix");
+cmds.connectAttr(sl[1] + ".outMesh", follicle + ".inputMesh");
+cmds.setAttr(follicle + ".simulationMethod", 0);
+parameterU = cmds.getAttr(closest + ".result.parameterU");
+parameterV = cmds.getAttr(closest + ".result.parameterV");
+
+cmds.setAttr(follicle + ".parameterU", parameterU);
+cmds.setAttr(follicle + ".parameterV", parameterV);
+
+cmds.parentConstraint(follicleTrans[0], sl[0], mo=True);
+cmds.delete(closest);
