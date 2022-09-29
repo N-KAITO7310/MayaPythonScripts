@@ -19,6 +19,8 @@
 """
 # ------------------------------------------------------------------------------
 from __future__ import absolute_import, division, generators, print_function, unicode_literals
+from fileinput import filename
+from hashlib import new
 from tabnanny import check
 try:
     from future_builtins import *
@@ -93,40 +95,66 @@ def getMayaWindow():
         return shiboken2.wrapInstance(long(ptr), QtWidgets.QWidget)
 
 # TODO: input text window
-class PopUpWindow(QtWidgets.QWidget):
-
-    newFileName = "";
+# class ModalWindow(QtWidgets.QDialog):
     
-    def __init__(self, parent=None):
-        super(PopUpWindow, self).__init__(parent)
+#     def __init__(self, parent=getMayaWindow()):
+#         super(ModalWindow, self).__init__(parent)
 
-        self.setWindowTitle("Input NewFileName")
+#         self.setWindowTitle("Input NewFileName")
 
-        self.setWindowFlags(QtCore.Qt.Popup)
+#         self.setWindowFlags(self.windowFlags() ^ QtCore.Qt.WindowContextHelpButtonHint)
+
+#         self.createWidgets()
+#         self.createLayout()
+#         self.createConnection()
+
+#     def createWidgets(self):
+#         self.textBox = QtWidgets.QLineEdit(self);
+#         self.okButton = QtWidgets.QPushButton(self);
+#         self.okButton.setText("OK");
+
+#     def createLayout(self):
+#         mainLayout = QtWidgets.QVBoxLayout(self);
+#         subLayout = QtWidgets.QFormLayout(self);
+#         subLayout.addRow("NewFileName:", self.textBox);
+
+#         mainLayout.addLayout(subLayout);
+#         mainLayout.addWidget(self.okButton);
+
+#     def createConnection(self):
+#         self.okButton.clicked.connect(self.accept);
+
+#     def getText(self):
+#         return self.textBox.text();
+    
+class ConfirmWindow(QtWidgets.QDialog):
+    
+    def __init__(self, parent=getMayaWindow()):
+        super(ConfirmWindow, self).__init__(parent)
+
+        self.setWindowTitle("Confirm")
+
+        self.setWindowFlags(self.windowFlags() ^ QtCore.Qt.WindowContextHelpButtonHint)
 
         self.createWidgets()
         self.createLayout()
         self.createConnection()
 
     def createWidgets(self):
-        self.textBox = QtWidgets.QLineEdit(self);
+        self.confirmText = QtWidgets.QLabel(self);
+        self.confirmText.setText("Done");
+
         self.okButton = QtWidgets.QPushButton(self);
         self.okButton.setText("OK");
 
     def createLayout(self):
         mainLayout = QtWidgets.QVBoxLayout(self);
-        subLayout = QtWidgets.QFormLayout(self);
-        subLayout.addRow("NewFileName:", self.textBox);
-
-        mainLayout.addLayout(subLayout);
+        
+        mainLayout.addWidget(self.confirmText);
         mainLayout.addWidget(self.okButton);
 
     def createConnection(self):
-        self.okButton.clicked.connect(self.ok);
-
-    def ok(self):
-        self.newFileName = self.textBox.text();
-        self.close();
+        self.okButton.clicked.connect(self.accept);
 
 class MainWindow(QtWidgets.QDialog):
     
@@ -152,12 +180,12 @@ class MainWindow(QtWidgets.QDialog):
         self.setWindowTitle(WINDOW_TITLE);
         self.setObjectName(self.__class__.UI_NAME);
         self.setMinimumSize(200, 50);
+        self.setWindowFlags(self.windowFlags() ^ QtCore.Qt.WindowContextHelpButtonHint)
+
 
         self.createWidgets();
         self.createLayout();
         self.createConnections();
-
-        self.popUpWindow = PopUpWindow(self);
 
     def createWidgets(self):
         self._applyButton = QtWidgets.QPushButton(self);
@@ -184,9 +212,26 @@ class MainWindow(QtWidgets.QDialog):
         ・各ボーンに接続されているAnimCurveノードを全て削除
         ・各コントローラから対応するボーンへ対しコンストレイント(このコンストレイントは全てペアレントでよいのか？)
         """
-        # ファイル処理(選択、開く)
+        # インポートファイル選択
         files = self.getFiles();
-        for filePath in files:
+        if files is None:
+            om.MGlobal.displayError("No file selected")
+            return;
+
+        # インポート元ファイルパス取得
+        currentPath = cmds.file(q=True, exn=True);
+
+        # 保存先ディレクトリ指定
+        saveDirectory = self.specifyFilePath();
+        if saveDirectory is None:
+            om.MGlobal.displayError("No Directory selected")
+            return;
+
+        # progress bar
+        progress = self.showProgressDialog();
+        fileCount = len(files);
+
+        for i, filePath in enumerate(files):
             # Import animation file
             imported = cmds.file(filePath, i=True, type="fbx", returnNewNodes=True, ignoreVersion=True, renameAll=True, mergeNamespacesOnClash=False, options="fbx", pr=True);
             
@@ -212,33 +257,72 @@ class MainWindow(QtWidgets.QDialog):
 
             startF, endF = self.analyzeKeyfameRange(jntCtrlTable.keys());
 
-            cmds.bakeSimulation(ctrlList, t=(startF, endF), at=TRANSLATION_ATTRS+ROTATE_ATTRS, simulation=False);
+            cmds.bakeResults(ctrlList, t=(startF, endF), at=TRANSLATION_ATTRS+ROTATE_ATTRS, simulation=False);
 
             # インポートされたノードを削除
             cmds.delete(imported);
 
-            # 別名保存を行う
-            self.popUpWindow.show();
+            # 保存処理
+            # newFileName = self.showModalWindow();
+            # if newFileName is None:
+            #     om.MGlobal.displayError("Please Input New File Name");
 
-            fileName, newFileName = self.saveAs(self.popUpWindow.newFileName);
-            cmds.file(fileName, open=True, force=True);
+            # oldFilePath ,newFilePath = self.saveAs(filePath, newFileName);
+            fileName = self.getFileName(filePath);
+            self.save(saveDirectory, fileName);
+
+            progressValue = self.culcProgressValue(fileCount, i);
+            self.updateProgressDialog(progress, progressValue);
+
+            # 再度ファイルを開き直し処理を継続する
+            cmds.file(currentPath, open=True, force=True);
+
+        self.showConfirmWindow();
+
+    def getFileName(self, path):
+        return path.split("/")[-1];
 
     def getFiles(self):
         try:
-            paths = cmds.fileDialog2(fileFilter=FILE_FILTER, fileMode=4, dialogStyle=2);
+            paths = cmds.fileDialog2(fileFilter=FILE_FILTER, fileMode=4, dialogStyle=2, caption="Select import fbx files");
         except:
             om.MGlobal.displayError("Error File Dialog");
             
         return paths;
 
-    def saveAs(self, newFileName):
-        filePath = cmds.file(q=True, expandName=True);
-        newFileName = "\\".join(filePath.split("\\")[:-1]) + newFileName;
+    def specifyFilePath(self):
+        # 保存先ディレクトリの指定
+        try:
+            path = cmds.fileDialog2(fileMode=3, dialogStyle=2, caption="Select save directory");
+        except:
+            om.MGlobal.displayError("Error File Dialog");
+            
+        if not path is None:
+            return path[0];
 
-        cmds.file(rename=newFileName);
-        cmds.file(save=True, type='mayaBinary', force=True);
+        return path;
 
-        return filePath, newFileName;
+    def save(self, filePath, fileName):
+        newFilePath = filePath + "/" + fileName;
+
+        try:
+            # ファイル保存処理
+            cmds.file(rename=newFilePath);
+            cmds.file(save=True, type='mayaBinary', force=True);
+
+        except:
+            om.MGlobal.displayError("Error save file");
+
+        return True;
+
+    # def saveAs(self, filePath, newFileName):
+    #     oldFilePath = cmds.file(q=True, exn=True)
+    #     newFilePath = "/".join(filePath.split("/")[:-1]) + "/" + newFileName;
+
+    #     cmds.file(rename=newFilePath);
+    #     cmds.file(save=True, type='mayaBinary', force=True);
+
+    #     return oldFilePath, newFilePath;
         
     def extractJnts(self, objs):
         return [node for node in objs if cmds.objectType(node) == "joint"];
@@ -281,9 +365,7 @@ class MainWindow(QtWidgets.QDialog):
             doSearch = True;
             listConType = "parentConstraint"
             searchStartObj = mainJnt;
-            print(mainJnt)
-            if mainJnt == "s:L_hand":
-                    print("here!")
+
             while doSearch:
                 # Translate, Rotateからコンストレイントノードを検索
                 const = cmds.listConnections(searchStartObj, type=listConType, source=True, destination=False);
@@ -329,7 +411,7 @@ class MainWindow(QtWidgets.QDialog):
                 isUnLockRot = self.checkLockState(child[0], "rx");
 
                 if isUnLockTrans:
-                    createdConst = cmds.pointConstraint(parent, child[0], mo=child[1])[0];
+                    createdConst = cmds.parentConstraint(parent, child[0], mo=child[1], skipRotate=["x", "y", "z"])[0];
                     createdConsts.append(createdConst);
 
                 if isUnLockRot:
@@ -381,7 +463,38 @@ class MainWindow(QtWidgets.QDialog):
                     if tempEndF > endF:
                         endF = tempEndF;
 
-        return [startF, endF];    
+        return [startF, endF];
+
+    # def showModalWindow(self):
+    #     modalWindow = ModalWindow();
+    #     result = modalWindow.exec_();
+
+    #     if result == QtWidgets.QDialog.Accepted:
+    #         return modalWindow.getText();
+    #     else:
+    #         return None;
+
+    def showProgressDialog(self):
+        progress = QtWidgets.QProgressDialog(self);
+        progress.setCancelButton(None);
+        progress.setWindowFlags(progress.windowFlags() ^ QtCore.Qt.WindowContextHelpButtonHint)
+
+        progress.show();
+
+        return progress;
+
+    def updateProgressDialog(self, progressDialog, value):
+        progressDialog.setValue(value);
+        QtWidgets.qApp.processEvents();
+
+    def culcProgressValue(self, fileCount, index):
+        return int(((index+1) / fileCount) * 100);
+
+    def showConfirmWindow(self):
+        confirmWindow = ConfirmWindow();
+        result = confirmWindow.exec_();
+
+        return result;
 
 def showUi():
     mainUi = MainWindow();
