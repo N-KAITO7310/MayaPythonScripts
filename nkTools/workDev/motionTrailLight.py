@@ -63,7 +63,7 @@ SCRIPTNODENAME = "motionTrailLightScriptNode"
 TRANSLATION_ATTRS = ["tx", "ty", "tz"];
 ROTATE_ATTRS = ["rx", "ry", "rz"];
 SCALE_ATTRS = ["sx", "sy", "sz"];
-COLOR_RED_INDEX = 13;4
+COLOR_RED_INDEX = 13;
 CURVE_OPTION_NAME = "DisplayOption";
 CURVE_DISPLAY_ENUM = ["Normal", "Template", "Reference"];
 class CreateOption():
@@ -743,12 +743,33 @@ class MainWindow(QtWidgets.QDialog):
                 cmds.delete(CURVE_GROUP);
 
     def deleteCallback(self, curveName):
+        """特定のモーショントレイルカーブを指定し、対応するコールバックをすべて削除する関数
+        
+       特定のモーショントレイルカーブを指定し、対応するコールバックをすべて削除する
+
+        Args:
+            curveName: モーショントレイルカーブ名文字列
+        Returns:
+            None
+
+        """
+
         global curveInfoDict, locList, callbackIds;
 
         cmds.evalDeferred("maya.api.OpenMaya.MMessage.removeCallbacks({})".format(callbackIds[curveName]));
         callbackIds.pop(curveName);
 
     def deleteAllCallbacks(self):
+        """作成されているコールバックを全て削除する関数
+        
+       作成されているコールバックを全て削除し、格納している変数を初期化する
+
+        Args:
+            None
+        Returns:
+            None
+
+        """
         global curveInfoDict, locList, callbackIds; 
 
         for curveName in callbackIds.keys():
@@ -801,6 +822,14 @@ class MainWindow(QtWidgets.QDialog):
                             for animNode in animNodes:
                                 self.setKeyFrameCallback(curve, animNode, targetName);
                             self.setPreRemoveCallback(curve)
+
+                    # callback for locator
+                    locName = str("{}_{}".format(targetName, LOC_SUFFIX));
+                    if locName in locList:
+                        # loc get animnode
+                        locAnimNodes = cmds.listConnections(locName, type="animCurveTL");
+                        for locAnimNode in locAnimNodes:
+                            self.setKeyFrameCallback(curve, locAnimNode, locName, option=1)
 
         else:
             # 全てのcallbackを削除
@@ -891,6 +920,13 @@ class MainWindow(QtWidgets.QDialog):
                     self.setKeyFrameCallback(curve, animNode, targetName);
                     self.setPreRemoveCallback(curve);
                     
+                # callback for locator
+                if locName in locList:
+                    # loc get animnode
+                    locAnimNodes = cmds.listConnections(locName, type="animCurveTL");
+                    for locAnimNode in locAnimNodes:
+                        self.setKeyFrameCallback(curve, locAnimNode, locName, option=1)
+
         cmds.select(cl=True);
         # for Deubug
         # print("setCallbackByScriptNode--------------------------------------------------------------------------")
@@ -925,7 +961,8 @@ class MainWindow(QtWidgets.QDialog):
         作成処理を実行。Update等での再利用、Undoを考慮し処理を切り出し
 
         Args:
-            None
+            option: REFERENCE_TARGET=ターゲットにコンストレインされるnullを作成し、そのworldMatrixを参照する
+                    REFERENCE_LOCATOR=カーブ作成時に生成されるロケーターを参照する(初回作成時のみコンストレイン、ベイク処理)
         Returns:
             None
         
@@ -953,6 +990,7 @@ class MainWindow(QtWidgets.QDialog):
         # curveBuildDict = {curveName : [worldMatrix...]}
         curveBuildDict = {};
         targetAnimNodeDict = {};
+        tempNullList = [];
         for frame in range(start, end + 1):
             for each in sel:
                 # define curveName
@@ -985,11 +1023,12 @@ class MainWindow(QtWidgets.QDialog):
                 existNull = cmds.ls(nullName);
                 if len(existNull) < 1:
                     tempNull = cmds.group(n=nullName, em=True);
+                    tempNullList.append(tempNull);
                     tempConst = cmds.parentConstraint(each, tempNull);
 
                 # get worldMatrix in specified frame
                 if option == CreateOption.REFERENCE_TARGET:
-                    wMatrix = cmds.getAttr("{}.worldMatrix[0]".format(tempNull), time=frame);
+                    wMatrix = cmds.getAttr("{}.worldMatrix[0]".format(nullName), time=frame);
                 elif option == CreateOption.REFERENCE_LOCATOR:
                     wMatrix = cmds.getAttr("{}.worldMatrix[0]".format(locName), time=frame);
 
@@ -1004,7 +1043,7 @@ class MainWindow(QtWidgets.QDialog):
                 if not animNodes is None and len(animNodes) > 0:
                     targetAnimNodeDict[curveName] = [animNodes, each];
 
-        cmds.delete(tempNull, tempConst);
+        cmds.delete(tempNullList);
                 
         # Build curve
         # For Loop - iterate on curveName

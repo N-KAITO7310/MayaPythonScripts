@@ -2,12 +2,26 @@
 from maya import OpenMayaUI, cmds;
 from PySide2 import QtWidgets, QtCore;
 import shiboken2;
+import sys
 
 def getMayaWindow():
-    print("run qt.py")
+    """Mayaウィンドウの取得メソッド
+
+    Mayaウィンドウを取得
+
+    Args:
+        None
+    Returns:
+        QtWidgets.QWidget: Mayaウィンドウを取得し、Qtでアクセス可能なクラスとしてreturnする関数。
+
+    """
     ptr = OpenMayaUI.MQtUtil.mainWindow();
-    widget = shiboken2.wrapInstance(long(ptr), QtWidgets.QWidget);
-    return widget;
+    if sys.version_info.major >= 3:
+        # python3
+            return shiboken2.wrapInstance(int(ptr), QtWidgets.QWidget)
+    else:
+        # python2
+        return shiboken2.wrapInstance(long(ptr), QtWidgets.QWidget)
 
 # p117 ボタンのクリックイベントで利用するも、引数違い？で動作せず
 class Callback(object):
