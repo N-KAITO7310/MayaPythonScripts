@@ -7,6 +7,7 @@ except:
 import sys
 sys.dont_write_bytecode = True
 from maya import OpenMayaUI, cmds;
+import maya.mel as mel;
 from PySide2 import QtWidgets, QtCore;
 import maya.OpenMayaUI as omui;
 import shiboken2;
@@ -41,6 +42,7 @@ pivotRig.showUi();
 """
 
 WINDOW_TITLE = "AttachMoveablePivotRigToolWindow";
+PIVOT_CTRL_GRP = "pivot_ctrl_grp";
 PIVOT_CTRL_SUFFIX = "_pivot_ctrl";
 OFFSET_GRP_SUFFIX = "_offset_grp";
 NEGA_GRP_SUFFIX = "_nega_grp";
@@ -63,7 +65,7 @@ class MainWindow(QtWidgets.QDialog):
         super(MainWindow, self).__init__(parent);
         self.setWindowTitle(WINDOW_TITLE);
         self.setObjectName(WINDOW_TITLE);
-        self.setMinimumSize(300, 200);
+        self.setMinimumSize(200, 100);
         self.setWindowFlags(self.windowFlags() ^ QtCore.Qt.WindowContextHelpButtonHint);
 
         self.createWidgets();
@@ -73,6 +75,11 @@ class MainWindow(QtWidgets.QDialog):
     def createWidgets(self):
         self.__createLocatorButton = QtWidgets.QPushButton(self);
         self.__createLocatorButton.setText("Create Locator");
+
+        self.__shapeCombo = QtWidgets.QComboBox(self);
+        self.__shapeCombo.addItem("Cross");
+        self.__shapeCombo.addItem("Sphere");
+        self.__shapeCombo.addItem("Octahedron");
 
         self.__createCtrlButton = QtWidgets.QPushButton(self);
         self.__createCtrlButton.setText("Create Controller");
@@ -87,6 +94,7 @@ class MainWindow(QtWidgets.QDialog):
         mainLayout = QtWidgets.QVBoxLayout(self);
 
         mainLayout.addWidget(self.__createLocatorButton);
+        mainLayout.addWidget(self.__shapeCombo);
         mainLayout.addWidget(self.__createCtrlButton);
         mainLayout.addWidget(self.__bakeButton);
         mainLayout.addWidget(self.__deleteButton);
@@ -98,6 +106,8 @@ class MainWindow(QtWidgets.QDialog):
         self.__deleteButton.clicked.connect(self.deleteRig);
 
     def createLocator(self):
+        cmds.undoInfo(openChunk=True);
+
         selectedObjs = cmds.ls(sl=True);
 
         if selectedObjs is None or len(selectedObjs) == 0:
@@ -109,6 +119,8 @@ class MainWindow(QtWidgets.QDialog):
             loc = cmds.spaceLocator(n="{}{}".format(selected, LOCATOR_SUFFIX));
             cmds.delete(cmds.parentConstraint(selected, loc, mo=False));
 
+        cmds.undoInfo(closeChunk=True);
+
     def attachMoveablePivotRig(self):
         """
         ・選択ロケーター位置に、offset＆Pivotコントローラを生成
@@ -116,8 +128,18 @@ class MainWindow(QtWidgets.QDialog):
         ・pivot_ctrl.Translate→composeMatrix→inverseMatrix→decomposeMatrix→nega.Translate
         """
 
-        # create ctrl and grp
+        cmds.undoInfo(openChunk=True);
         sel = cmds.ls(sl=True);
+
+        # check pivot ctrl grp
+        pivotCtrlGrp = cmds.ls(PIVOT_CTRL_GRP);
+        if pivotCtrlGrp is None or len(pivotCtrlGrp) == 0:
+            pivotCtrlGrp = cmds.group(em=True, n=PIVOT_CTRL_GRP);
+        else:
+            pivotCtrlGrp = pivotCtrlGrp[0];
+        cmds.select(cl=True);
+
+        # create ctrl and grp
         if sel is None or len(sel) == 0:
             om.MGlobal.displayError("Please Select Pivot Position Locator");
             return;
@@ -142,24 +164,20 @@ class MainWindow(QtWidgets.QDialog):
         cmds.delete(cmds.parentConstraint(targetCtrlName, targetOffsetGrp, mo=False));
         # オフセットグループをターゲットの上位ノード下にペアレント
         cmds.parent(targetOffsetGrp, parentObj);
-        # フリーズをかける
-        cmds.makeIdentity(targetOffsetGrp, apply=True, t=True, r=True, s=True, n=False, pn=True);
         # ターゲットコントロールを元あった位置に戻す
         cmds.delete(cmds.parentConstraint(tempPosLoc, targetCtrlName));
         cmds.delete(tempPosLoc);
-        # オフセットにターゲットコントロールをペアレント
-        cmds.parent(targetCtrlName, targetOffsetGrp);
 
         # ピボットコントローラ、オフセットを作成
         pivotCtrlOffsetGrp = cmds.group(em=True, n="{}{}".format(pivotCtrlName, OFFSET_GRP_SUFFIX));
-        pivotCtrl = self.createCtrlCurve(targetCtrlName);
+        shapeNum = self.__shapeCombo.currentIndex();
+        pivotCtrl = self.createCtrlCurve(targetCtrlName, shapeNum);
         cmds.parent(pivotCtrl, pivotCtrlOffsetGrp);
 
         negaGrp = cmds.group(em=True, parent=pivotCtrl, n="{}{}".format(targetCtrlName, NEGA_GRP_SUFFIX));
         cmds.xform(pivotCtrlOffsetGrp, matrix=pivotMat, ws=True);
 
-        cmds.parent(pivotCtrlOffsetGrp, parentObj);
-        cmds.makeIdentity(pivotCtrlOffsetGrp, apply=True, t=True, r=True, s=True, n=False, pn=True);
+        cmds.parent(pivotCtrlOffsetGrp, pivotCtrlGrp);
 
         # create pivot system
         composeMat =  cmds.createNode("composeMatrix", n="{}_composeMatrix".format(targetCtrlName));
@@ -173,15 +191,39 @@ class MainWindow(QtWidgets.QDialog):
 
         cmds.parent(targetOffsetGrp, negaGrp);
 
+        # connect targetRig pivotRigSystem
+        cmds.parentConstraint(parentObj, pivotCtrlOffsetGrp, mo=True);
+        multMat = cmds.createNode("multMatrix", n=pivotCtrlName + "_multMat");
+        # TODO get global transform
+        rotatePivot = cmds.getAttr("{}.rotatePivot".format(targetCtrlName));
+        compoMat = cmds.createNode("composeMatrix", n=pivotCtrl + "_rotatePivot_composeMatrix");
+        print(rotatePivot);
+        cmds.setAttr("{}.inputTranslate".format(compoMat), rotatePivot, type="double3");
+        inverseMat = cmds.createNode("inverseMatrix", n=pivotCtrl + "_rotatePivot_inverseMatrix");
+        cmds.connectAttr("{}.outputMatrix".format(inverseMat), "{}.matrixIn[0]".format(multMat));
+        cmds.connectAttr("{}.worldInverseMatrix[0]".format("RIG_Chr025_script:all_translate_c"), "{}.matrixIn[1]".format(multMat));
+        cmds.connectAttr("{}.worldMatrix[0]".format(targetOffsetGrp), "{}.matrixIn[2]".format(multMat));
+        cmds.connectAttr("{}.matrixSum".format(multMat), "{}.offsetParentMatrix".format(targetCtrlName));
+
         cmds.delete(pivotPosLoc);
+        cmds.select(cl=True);
+
+        cmds.undoInfo(closeChunk=True);
 
     def bakeApply(self):
+        cmds.undoInfo(openChunk=True);
+
         sel = cmds.ls(sl=True);
         # ベイクしたいpivotCtrlを選択して実行。ベイク、アンペアレント＆りペアレント、不要になったコントローラ群を削除
         pivotCtrl, targetCtrl = self.getPivotCtrlAndTargetCtrl();
-        print(pivotCtrl, targetCtrl)
 
-        # bake frame TODO: 範囲はターゲットorピボットコントロール？ユーザーに入力させるかタイムスライダ―？
+        # check keyframe
+        keyCount = cmds.keyframe(pivotCtrl, q=True, keyframeCount=True);
+        if keyCount < 1:
+            om.MGlobal.displayError("Please keyframe pivotCtrl");
+            return;
+
+        # bake frame
         startF = cmds.findKeyframe(targetCtrl, which="first");
         endF = cmds.findKeyframe(targetCtrl, which="last");
 
@@ -190,54 +232,93 @@ class MainWindow(QtWidgets.QDialog):
         cmds.parentConstraint(targetCtrl, tempLoc);
         cmds.bakeResults(tempLoc, t=(startF, endF), at=TRANSLATION_ATTRS+ROTATE_ATTRS, simulation=False);
 
-        # ターゲットを元の階層に。キーを削除したうえでベイク処理。不要なノードを削除。
-        parentObj = cmds.listRelatives(pivotCtrl + OFFSET_GRP_SUFFIX, parent=True)[0];
-        cmds.parent(targetCtrl, parentObj);
+        # delete pivot rig
+        self.deleteRig(pivotCtrl, targetCtrl);
 
-        for attr in TRANSLATION_ATTRS + ROTATE_ATTRS:
-            source = cmds.listConnections("{}.{}".format(targetCtrl, attr));
-            if source is None:
-                continue;
-            source = source[0];
-            cmds.delete(source);
+        cmds.undoInfo(closeChunk=True);
 
-        tempPConst = cmds.parentConstraint(tempLoc, targetCtrl);
-        cmds.bakeResults(targetCtrl, t=(startF, endF), at=TRANSLATION_ATTRS+ROTATE_ATTRS, simulation=False);
-        cmds.delete(tempLoc, tempPConst, pivotCtrl + OFFSET_GRP_SUFFIX);
+    def delete(self):
+        cmds.undoInfo(openChunk=True);
 
-    def deleteRig(self):
-        pivotCtrl, targetCtrl = self.getPivotCtrlAndTargetCtrl();
+        self.deleteRig();
 
-        negaGrp = targetCtrl + NEGA_GRP_SUFFIX;
+        cmds.undoInfo(closeChunk=True);
+
+    def deleteRig(self, pivotCtrl=None, targetCtrl=None):
+        if pivotCtrl is None and targetCtrl is None:
+            pivotCtrl, targetCtrl = self.getPivotCtrlAndTargetCtrl();
 
         # breakConnection
-        tConSource = cmds.listConnections("{}.translate".format(negaGrp), source=True)[0];
-        cmds.disconnectAttr("{}.outputTranslate".format(tConSource), "{}.translate".format(negaGrp));
+        matrixSum = cmds.getAttr("{}.matrixSum".format(pivotCtrl + "_multMat"));
+        cmds.disconnectAttr("{}.matrixSum".format(pivotCtrl + "_multMat"), "{}.offsetParentMatrix".format(targetCtrl));
+
+        # reset offsetParentMatrix
+        defaultMat = om.MMatrix();
+        # targetCtrlRowWMat = cmds.getAttr("{}.worldMatrix[0]".format(targetCtrl), type="matrix");
+        # pivotCtrlLocalRowWMat = cmds.getAttr("{}.worldMatrix[0]".format(pivotCtrl), type="matrix");
+
+        # # culc mat
+        # targetCtrlWMat = om.MMatrix(targetCtrlRowWMat);
+        # pivotCtrlLocalWMat = om.MMatrix(pivotCtrlLocalRowWMat);
+        # culcMat = targetCtrlWMat * pivotCtrlLocalWMat;
+
+        cmds.setAttr("{}.offsetParentMatrix".format(targetCtrl), defaultMat, type="matrix");
+        cmds.xform(targetCtrl, matrix=matrixSum, worldSpace=True);
 
         # delete
         pivotCtrlOffsetGrp = pivotCtrl + OFFSET_GRP_SUFFIX;
-        parentObj = cmds.listRelatives(pivotCtrlOffsetGrp, parent=True)[0];
-        cmds.parent(pivotCtrlOffsetGrp, w=True);
-        cmds.parent(targetCtrl, parentObj);
+        cmds.delete(pivotCtrl + "_multMat", pivotCtrlOffsetGrp);
 
-        cmds.delete(pivotCtrlOffsetGrp);
+        # check pivotCtrlGrp
+        pivotCtrlGrp = cmds.ls(PIVOT_CTRL_GRP);
+        if not pivotCtrlGrp is None or len(pivotCtrlGrp) > 0:
+            pivotCtrlGrp = pivotCtrlGrp[0];
+            children = cmds.listRelatives(pivotCtrlGrp, c=True);
+            if children is None:
+                cmds.delete(children);
 
     def getPivotCtrlAndTargetCtrl(self):
         pivotCtrl = cmds.ls(sl=True);
-        if pivotCtrl is None:
+        if pivotCtrl is None or len(pivotCtrl) == 0:
             om.MGlobal.displayError("Please Select pivot controller");
-            return;
+            return None;
         else:
             pivotCtrl = pivotCtrl[0];
         if not PIVOT_CTRL_SUFFIX in pivotCtrl:
             om.MGlobal.displayError("Please Select pivot controller");
-            return;
+            return None;
         targetCtrl = pivotCtrl.split(PIVOT_CTRL_SUFFIX)[0];
 
         return pivotCtrl, targetCtrl;
 
-    def createCtrlCurve(self, targetName):
-        ctrlCurve = cmds.curve(d=1, p=[[0, 0, 1] ,[0 ,0.5 ,0.866025], [0, 0.866025, 0.5], [0, 1, 0] ,[0, 0.866025, -0.5], [0, 0.5, -0.866025], [0, 0, -1], [0, -0.5, -0.866025], [0, -0.866025, -0.5], [0, -1, 0], [0, -0.866025, 0.5], [0, -0.5, 0.866025], [0, 0, 1], [0.707107, 0, 0.707107], [1, 0, 0], [0.707107, 0, -0.707107], [0, 0, -1], [-0.707107, 0, -0.707107], [-1, 0, 0], [-0.866025, 0.5, 0], [-0.5, 0.866025, 0], [0, 1, 0], [0.5, 0.866025, 0], [0.866025, 0.5, 0], [1, 0, 0], [0.866025, 0.5, 0], [0.5, -0.866025, 0] ,[0, -1, 0], [-0.5, -0.866025, 0], [-0.866025, -0.5, 0], [-1, 0, 0], [-0.707107, 0, 0.707107], [0, 0, 1]], k=[0 ,1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32], n="{}{}".format(targetName, PIVOT_CTRL_SUFFIX));
+    def createCtrlCurve(self, targetName, shapeNum):
+        if shapeNum == 0:
+            ctrlCurve = cmds.curve(name="{}{}".format(targetName, PIVOT_CTRL_SUFFIX),d=1,
+            p=[(-1.0, 0.0, 0.0), (1.0, 0.0, 0.0),(0.0, 0.0, 0.0),(0.0, 0.0, 1.0),(0.0, 0.0, -1.0),(0.0, 0.0, 0.0),(0.0, 1.0, 0.0), (0.0, -1.0, 0.0)],
+            k=[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
+
+        elif shapeNum == 1:
+            ctrlCurve = cmds.curve(name="{}{}".format(targetName, PIVOT_CTRL_SUFFIX), d=1,
+            p=[(0.0, 1.0, 0.0), (0.0, 0.92388, 0.382683), (0.0, 0.707107, 0.707107), (0.0, 0.382683, 0.92388), (0.0, 0.0, 1.0),
+                (0.0, -0.382683, 0.92388), (0.0, -0.707107, 0.707107), (0.0, -0.92388, 0.382683), (0.0, -1.0, 0.0), (0.0, -0.92388, -0.382683),
+                (0.0, -0.707107, -0.707107), (0.0, -0.382683, -0.92388), (0.0, 0.0, -1.0), (0.0, 0.382683, -0.92388), (0.0, 0.707107, -0.707107),
+                (0.0, 0.92388, -0.382683), (0.0, 1.0, 0.0), (0.382683, 0.92388, 0.0), (0.707107, 0.707107, 0.0), (0.92388, 0.382683, 0.0),
+                (1.0, 0.0, 0.0), (0.92388, -0.382683, 0.0), (0.707107, -0.707107, 0.0), (0.382683, -0.92388, 0.0), (0.0, -1.0, 0.0),
+                (-0.382683, -0.92388, 0.0), (-0.707107, -0.707107, 0.0), (-0.92388, -0.382683, 0.0), (-1.0, 0.0, 0.0), (-0.92388, 0.382683, 0.0),
+                (-0.707107, 0.707107, 0.0), (-0.382683, 0.92388, 0.0), (0.0, 1.0, 0.0), (0.0, 0.92388, -0.382683), (0.0, 0.707107, -0.707107),
+                (0.0, 0.382683, -0.92388), (0.0, 0.0, -1.0), (-0.382683, 0.0, -0.92388), (-0.707107, 0.0, -0.707107), (-0.92388, 0.0, -0.382683),
+                (-1.0, 0.0, 0.0), (-0.92388, 0.0, 0.382683), (-0.707107, 0.0, 0.707107), (-0.382683, 0.0, 0.92388), (0.0, 0.0, 1.0),
+                (0.382683, 0.0, 0.92388), (0.707107, 0.0, 0.707107), (0.92388, 0.0, 0.382683), (1.0, 0.0, 0.0), (0.92388, 0.0, -0.382683),
+                (0.707107, 0.0, -0.707107), (0.382683, 0.0, -0.92388), (0.0, 0.0, -1.0)],
+            k=[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0,
+                23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0, 37.0, 38.0, 39.0, 40.0, 41.0, 42.0, 43.0,
+                44.0, 45.0, 46.0, 47.0, 48.0, 49.0, 50.0, 51.0, 52.0])
+        
+        elif shapeNum == 2:
+           ctrlCurve = cmds.curve(name="{}{}".format(targetName, PIVOT_CTRL_SUFFIX),d=1,
+            p=[(0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (-1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), 
+                (0.0, -1.0, 0.0), (0.0, 0.0, -1.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (-1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (1.0, 0.0, 0.0)],
+            k=[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0])
 
         return ctrlCurve;
 
