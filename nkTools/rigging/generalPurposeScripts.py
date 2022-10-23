@@ -196,7 +196,7 @@ for i, p in enumerate(posList):
     cmds.delete(p);
     cmds.select(cl=True);
 
-# create fk ik system
+# create fk ik system translate rotation only
 switchCtrl = str(cmds.ls(sl=True)[0]);
 baseJnts = cmds.ls(sl=True)[1:];
 for baseJnt in baseJnts:
@@ -236,6 +236,38 @@ for baseJnt in baseJnts:
         cmds.connectAttr(ikJnt + ".scale" + axis, scaleBC + ".color1" + rgb[i]);
         cmds.connectAttr(scaleBC + ".output" + rgb[i], baseJnt + ".scale" + axis);
         
+import maya.cmds as cmds;
+
+# create fk ik system
+switchCtrl = str(cmds.ls(sl=True)[0]);
+baseJnts = cmds.ls(sl=True)[1:];
+for baseJnt in baseJnts:
+    baseJnt = str(baseJnt);
+    fkJnt = baseJnt[:baseJnt.rfind("_jnt")] + "_fk_jnt";
+    ikJnt = baseJnt[:baseJnt.rfind("_jnt")] + "_ik_jnt";
+    reverse = switchCtrl + "_reverse";
+    transBC = cmds.shadingNode("blendColors", au=True, n=baseJnt + "_trans_BC");
+    rotBC = cmds.shadingNode("blendColors", au=True, n=baseJnt + "_rot_BC");
+    scaleBC = cmds.shadingNode("blendColors", au=True, n=baseJnt + "_scale_BC");
+    cmds.connectAttr(switchCtrl + ".FKIKSwitch", transBC + ".blender");
+    cmds.connectAttr(switchCtrl + ".FKIKSwitch", rotBC + ".blender");
+    cmds.connectAttr(switchCtrl + ".FKIKSwitch", scaleBC + ".blender");
+    xyz = ["X", "Y", "Z"];
+    rgb = ["R", "G", "B"];
+    for i, axis in enumerate(xyz):
+        cmds.connectAttr(fkJnt + ".translate" + axis, transBC + ".color2" + rgb[i]);
+        cmds.connectAttr(ikJnt + ".translate" + axis, transBC + ".color1" + rgb[i]);
+        cmds.connectAttr(transBC + ".output" + rgb[i], baseJnt + ".translate" + axis);
+    for i, axis in enumerate(xyz):
+        cmds.connectAttr(fkJnt + ".rotate" + axis, rotBC + ".color2" + rgb[i]);
+        cmds.connectAttr(ikJnt + ".rotate" + axis, rotBC + ".color1" + rgb[i]);
+        cmds.connectAttr(rotBC + ".output" + rgb[i], baseJnt + ".rotate" + axis);
+    for i, axis in enumerate(xyz):
+        cmds.connectAttr(fkJnt + ".scale" + axis, scaleBC + ".color2" + rgb[i]);
+        cmds.connectAttr(ikJnt + ".scale" + axis, scaleBC + ".color1" + rgb[i]);
+        cmds.connectAttr(scaleBC + ".output" + rgb[i], baseJnt + ".scale" + axis);
+
+
 # setup ikStretchScale from ikSpline 
 curve = str(cmds.ls(sl=True)[0]);
 stretchJnts = cmds.ls(sl=True)[1:];

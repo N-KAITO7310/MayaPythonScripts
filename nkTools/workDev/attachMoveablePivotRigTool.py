@@ -47,6 +47,7 @@ PIVOT_CTRL_SUFFIX = "_pivot_ctrl";
 OFFSET_GRP_SUFFIX = "_offset_grp";
 NEGA_GRP_SUFFIX = "_nega_grp";
 LOCATOR_SUFFIX = "_loc";
+AXIS_LIST = ["X", "Y", "Z"];
 TRANSLATION_ATTRS = ["tx", "ty", "tz"];
 ROTATE_ATTRS = ["rx", "ry", "rz"];
 
@@ -91,13 +92,13 @@ class MainWindow(QtWidgets.QDialog):
         self.__deleteButton.setText("Delete");
 
     def createLayout(self):
-        mainLayout = QtWidgets.QVBoxLayout(self);
+        mainLayout = QtWidgets.QFormLayout(self);
 
-        mainLayout.addWidget(self.__createLocatorButton);
-        mainLayout.addWidget(self.__shapeCombo);
-        mainLayout.addWidget(self.__createCtrlButton);
-        mainLayout.addWidget(self.__bakeButton);
-        mainLayout.addWidget(self.__deleteButton);
+        mainLayout.addRow(self.__createLocatorButton);
+        mainLayout.addRow("CurveShape", self.__shapeCombo);
+        mainLayout.addRow(self.__createCtrlButton);
+        mainLayout.addRow(self.__bakeButton);
+        mainLayout.addRow(self.__deleteButton);
 
     def createConnections(self):
         self.__createLocatorButton.clicked.connect(self.createLocator);
@@ -159,6 +160,8 @@ class MainWindow(QtWidgets.QDialog):
         # ターゲットコントロールの移動値を保持、matrixを0にし、デフォルト位置に戻す。フリーズがかかっているためロケーターを利用して保持
         tempPosLoc = cmds.spaceLocator();
         cmds.delete(cmds.parentConstraint(targetCtrlName, tempPosLoc));
+        currentTrans = cmds.getAttr("{}.translate".format(targetCtrlName));
+        currentRot = cmds.getAttr("{}.rotate".format(targetCtrlName))
         cmds.xform(targetCtrlName, ws=True, translation=[0, 0, 0], rotation=[0, 0, 0]);
         # オフセットグループをターゲットコントロールのデフォルト位置にスナップ
         cmds.delete(cmds.parentConstraint(targetCtrlName, targetOffsetGrp, mo=False));
@@ -194,17 +197,19 @@ class MainWindow(QtWidgets.QDialog):
         # connect targetRig pivotRigSystem
         cmds.parentConstraint(parentObj, pivotCtrlOffsetGrp, mo=True);
         multMat = cmds.createNode("multMatrix", n=pivotCtrlName + "_multMat");
-        # TODO get global transform
-        rotatePivot = cmds.getAttr("{}.rotatePivot".format(targetCtrlName));
+        rotatePivot = cmds.getAttr("{}.rotatePivot".format(targetCtrlName))[0];
         compoMat = cmds.createNode("composeMatrix", n=pivotCtrl + "_rotatePivot_composeMatrix");
-        print(rotatePivot);
-        cmds.setAttr("{}.inputTranslate".format(compoMat), rotatePivot, type="double3");
+        for i, rp in enumerate(rotatePivot):
+            cmds.setAttr("{}.inputTranslate{}".format(compoMat, AXIS_LIST[i]), rp);
         inverseMat = cmds.createNode("inverseMatrix", n=pivotCtrl + "_rotatePivot_inverseMatrix");
+        cmds.connectAttr("{}.outputMatrix".format(compoMat), "{}.inputMatrix".format(inverseMat));
         cmds.connectAttr("{}.outputMatrix".format(inverseMat), "{}.matrixIn[0]".format(multMat));
         cmds.connectAttr("{}.worldInverseMatrix[0]".format("RIG_Chr025_script:all_translate_c"), "{}.matrixIn[1]".format(multMat));
         cmds.connectAttr("{}.worldMatrix[0]".format(targetOffsetGrp), "{}.matrixIn[2]".format(multMat));
         cmds.connectAttr("{}.matrixSum".format(multMat), "{}.offsetParentMatrix".format(targetCtrlName));
 
+        cmds.setAttr("{}.translate".format(targetCtrlName), currentTrans[0][0], currentTrans[0][1], currentTrans[0][2], type="float3");
+        cmds.setAttr("{}.rotate".format(targetCtrlName), currentRot[0][0], currentRot[0][1], currentRot[0][2], type="double3");
         cmds.delete(pivotPosLoc);
         cmds.select(cl=True);
 
@@ -223,17 +228,33 @@ class MainWindow(QtWidgets.QDialog):
             om.MGlobal.displayError("Please keyframe pivotCtrl");
             return;
 
-        # bake frame
+        # bake frame targetにキーがある場合はその範囲、キーがない場合はピボットコントローラのキーフレーム範囲を参照する
         startF = cmds.findKeyframe(targetCtrl, which="first");
         endF = cmds.findKeyframe(targetCtrl, which="last");
+        if startF == endF:
+            startF = cmds.findKeyframe(pivotCtrl, which="first");
+            endF = cmds.findKeyframe(pivotCtrl, which="last");
 
         # ready source
         tempLoc = cmds.spaceLocator();
-        cmds.parentConstraint(targetCtrl, tempLoc);
+        tempConst = cmds.parentConstraint(targetCtrl, tempLoc);
         cmds.bakeResults(tempLoc, t=(startF, endF), at=TRANSLATION_ATTRS+ROTATE_ATTRS, simulation=False);
+        cmds.bakeResults(targetCtrl, t=(startF, endF), at=TRANSLATION_ATTRS+ROTATE_ATTRS, simulation=False);
+        cmds.delete(tempConst);
 
         # delete pivot rig
         self.deleteRig(pivotCtrl, targetCtrl);
+
+        # tempLocのsourceとして対象となるキーフレームでtargetを位置合わせする
+        currentTime = cmds.currentTime(q=True);
+        for frame in range(int(startF), int(endF) + 1):
+            cmds.currentTime(frame);
+            cmds.matchTransform(targetCtrl, tempLoc, pos=True, rot=True);
+            cmds.setKeyframe(targetCtrl, breakdown=0, preserveCurveShape=0, hierarchy="none", controlPoints=0, shape=0, attribute="translate");
+            cmds.setKeyframe(targetCtrl, breakdown=0, preserveCurveShape=0, hierarchy="none", controlPoints=0, shape=0, attribute="rotate");
+
+        cmds.currentTime(currentTime);
+        cmds.delete(tempLoc);
 
         cmds.undoInfo(closeChunk=True);
 
@@ -249,33 +270,25 @@ class MainWindow(QtWidgets.QDialog):
             pivotCtrl, targetCtrl = self.getPivotCtrlAndTargetCtrl();
 
         # breakConnection
-        matrixSum = cmds.getAttr("{}.matrixSum".format(pivotCtrl + "_multMat"));
+        tempNull = cmds.group(em=True);
+        cmds.matchTransform(tempNull, targetCtrl, pos=True, rot=True);
         cmds.disconnectAttr("{}.matrixSum".format(pivotCtrl + "_multMat"), "{}.offsetParentMatrix".format(targetCtrl));
 
         # reset offsetParentMatrix
         defaultMat = om.MMatrix();
-        # targetCtrlRowWMat = cmds.getAttr("{}.worldMatrix[0]".format(targetCtrl), type="matrix");
-        # pivotCtrlLocalRowWMat = cmds.getAttr("{}.worldMatrix[0]".format(pivotCtrl), type="matrix");
-
-        # # culc mat
-        # targetCtrlWMat = om.MMatrix(targetCtrlRowWMat);
-        # pivotCtrlLocalWMat = om.MMatrix(pivotCtrlLocalRowWMat);
-        # culcMat = targetCtrlWMat * pivotCtrlLocalWMat;
-
         cmds.setAttr("{}.offsetParentMatrix".format(targetCtrl), defaultMat, type="matrix");
-        cmds.xform(targetCtrl, matrix=matrixSum, worldSpace=True);
+        tempConst = cmds.parentConstraint(tempNull, targetCtrl, mo=False);
 
         # delete
-        pivotCtrlOffsetGrp = pivotCtrl + OFFSET_GRP_SUFFIX;
-        cmds.delete(pivotCtrl + "_multMat", pivotCtrlOffsetGrp);
+        cmds.delete(pivotCtrl + "_multMat", tempNull, tempConst, pivotCtrl + OFFSET_GRP_SUFFIX);
 
         # check pivotCtrlGrp
         pivotCtrlGrp = cmds.ls(PIVOT_CTRL_GRP);
-        if not pivotCtrlGrp is None or len(pivotCtrlGrp) > 0:
+        if (not pivotCtrlGrp is None) and len(pivotCtrlGrp) > 0:
             pivotCtrlGrp = pivotCtrlGrp[0];
             children = cmds.listRelatives(pivotCtrlGrp, c=True);
             if children is None:
-                cmds.delete(children);
+                cmds.delete(pivotCtrlGrp);
 
     def getPivotCtrlAndTargetCtrl(self):
         pivotCtrl = cmds.ls(sl=True);
