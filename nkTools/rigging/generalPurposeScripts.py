@@ -13,10 +13,10 @@ cmds.select(cl=True);
 follicles = [];
 for i, s in enumerate(selected):
     i = str(i + 1);
-    renamed = cmds.rename(s, "r_eyeBlow_ribbon_{0}_follicle".format(i.zfill(2)));
+    renamed = cmds.rename(s, "l_arm_B_ribbon_{0}_follicle".format(i.zfill(2)));
     follicles.append(renamed)
 follicleGrp = str(cmds.listRelatives(follicles[0], p=True, type="transform")[0]);
-cmds.rename(follicleGrp, "r_eyeBlow_ribbon_follicle_grp")
+cmds.rename(follicleGrp, "l_arm_B_ribbon_follicle_grp")
     
 # create and rename jnt
 selected = cmds.ls(sl=True);
@@ -24,7 +24,7 @@ cmds.select(cl=True);
 for i, s in enumerate(selected):
     i = str(i + 1);
     cmds.select(s);
-    joint = cmds.joint(n="r_eyeBlow_ribbon_{0}_jnt".format(i.zfill(2)))
+    joint = cmds.joint(n="l_arm_B_ribbon_{0}_jnt".format(i.zfill(2)))
     cmds.setAttr(joint + ".radius", 0.1);
     
 # rename jnts zfill
@@ -91,7 +91,7 @@ pma = cmds.shadingNode("plusMinusAverage", au=True, n=prefix + "Blink_PMA");
 cmds.connectAttr(eyeControl + ".BlinkHeight", pma + ".input1D[0]");
 cmds.connectAttr(eyeControl + ".BlinkHeight", pma + ".input1D[1]");
 cmds.disconnectAttr(eyeControl + ".BlinkHeight", pma + ".input1D[1]");
-# input1D[1]への入力は各コントローラの回転値毎に手動で行う
+# input1D[1]への入力�吂�ントローラの回転値毎に手動で行う
 cmds.connectAttr(pma + ".output1D", remap + ".outputMax");
 
 # follow Eye
@@ -290,7 +290,7 @@ for jnt in stretchJnts:
         cmds.connectAttr(scaleBC + ".color1R", jnt + ".scaleX");
         
 
-# proximityPin用のコントローラグループにドライバを設定しコンストレイントする(ProximityPinは手動で行う)
+# proximityPin用のコントローラグループにドライバを設定しコンストレイントす�ProximityPinは手動で行う)
 targetGrps = cmds.ls(sl=True);
 for targetGrp in targetGrps:
     target = str(targetGrp);
@@ -302,7 +302,7 @@ for targetGrp in targetGrps:
     ctrl = str(cmds.listRelatives(auto, c=True)[0]);
     cmds.pointConstraint(driverGrp, auto, mo=False);
 
-# followコントローラとスキンジョイント用コントローラとを接続する
+# followコントローラとスキンジョイント用コントローラとを接続す�
 ctrls = cmds.ls(sl=True);
 for ctrl in ctrls:
     followCtrl = str(ctrl);
@@ -549,3 +549,34 @@ cmds.setAttr(follicle + ".parameterV", parameterV);
 
 cmds.parentConstraint(follicleTrans[0], sl[0], mo=True);
 cmds.delete(closest);
+
+# add shape to joint
+curveTrans = cmds.ls(sl=True, type="transform")[0];
+curveShape = cmds.listRelatives(curveTrans, c=True)[0];
+jnts = cmds.ls(sl=True, type="joint")[0:];
+for jnt in jnts:
+    cmds.delete(cmds.parentConstraint(jnt, curveTrans, mo=False));
+    cmds.parent(curveShape, jnt, add=True, shape=True);
+    cmds.setAttr("{}.drawStyle".format(jnt), 2);
+    
+# iterate skin bind
+inf = cmds.ls(sl=True)[0];
+targets = cmds.ls(sl=True)[1:];
+
+for target in targets:
+    cmds.skinCluster(inf, target, dr=4.0, toSelectedBones=True,skinMethod=1, wd=1, obeyMaxInfluences=False, bindMethod=1, normalizeWeights=1);
+    
+# generate joint Opposite side and rename
+jnts = cmds.ls(sl=True, type="joint");
+for jnt in jnts:
+    cmds.select(cl=True);
+    pos = cmds.xform(jnt, q=True, translation=True, worldSpace=True);
+    newJnt = cmds.joint(p=pos);
+    xTrans = cmds.getAttr("{}.translateX".format(newJnt));
+    oppositeXtrans = xTrans * -1;
+    cmds.setAttr("{}.translateX".format(newJnt), oppositeXtrans);
+    
+    # rename
+    side = newJnt.split("_");
+    cmds.rename()
+    

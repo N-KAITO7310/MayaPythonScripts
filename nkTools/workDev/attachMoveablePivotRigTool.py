@@ -35,9 +35,11 @@ https://lesterbanks.com/2017/10/2-ways-create-movable-pivot-maya/
     ・生成したコントローラを削除
 ・(更新ボタンは恐らく不要)
 
-import nkTools.workDev.attachMoveablePivotRigTool.py as pivotRig;
+import attachMoveablePivotRigTool.py as pivotRig;
 reload(pivotRig);
 pivotRig.showUi();
+
+last updated: 2022/10/31
 
 """
 
@@ -51,7 +53,32 @@ AXIS_LIST = ["X", "Y", "Z"];
 TRANSLATION_ATTRS = ["tx", "ty", "tz"];
 ROTATE_ATTRS = ["rx", "ry", "rz"];
 
+def maya_useNewAPI():
+    """Maya Python API 2.0 の明示的な使用宣言
+
+    The presence of this function tells Maya that the plugin produces, and
+    expects to be passed, objects created using the Maya Python API 2.0.
+
+    Args:
+        None
+    Returns:
+        None
+
+    """
+    pass;
+
 def getMayaWindow():
+    """Mayaウィンドウの取得メソッド
+
+    Mayaウィンドウを取得
+
+    Args:
+        None
+    Returns:
+        QtWidgets.QWidget: Mayaウィンドウを取得し、Qtでアクセス可能なクラスとしてreturnする関数。
+
+    """
+
     ptr = OpenMayaUI.MQtUtil.mainWindow();
     if sys.version_info.major >= 3:
         # python3
@@ -61,8 +88,32 @@ def getMayaWindow():
         return shiboken2.wrapInstance(long(ptr), QtWidgets.QWidget);
 
 class MainWindow(QtWidgets.QDialog):
+    """メインウィンドウクラス
+    
+    本ツールのメインウィンドウクラス
+
+    Attributes:
+        UI_NAME: 表示されるウィンドウ名
+
+    """
 
     def __init__(self, parent=getMayaWindow()):
+        """ウィンドウクラスのinit
+
+        この関数で行っていること
+        ・ウィンドウタイトル設定
+        ・UIサイズ設定
+        ・ウィジェットオブジェクトの作成
+        ・レイアウト設定
+        ・スロットの設定
+
+        Args:
+            parent: (QtWidgets.QWidget): 親ウィンドウとして設定するインスタンス。デフォルトでMayaのウィンドウを指定。
+        Returns:
+            None
+        
+        """
+
         super(MainWindow, self).__init__(parent);
         self.setWindowTitle(WINDOW_TITLE);
         self.setObjectName(WINDOW_TITLE);
@@ -74,6 +125,17 @@ class MainWindow(QtWidgets.QDialog):
         self.createConnections();
 
     def createWidgets(self):
+        """Widgetクラスの生成
+
+        ボタン等各Widgetクラスを生成する
+
+        Args:
+            None
+        Returns:
+            None
+
+        """
+
         self.__createLocatorButton = QtWidgets.QPushButton(self);
         self.__createLocatorButton.setText("Create Locator");
 
@@ -92,6 +154,16 @@ class MainWindow(QtWidgets.QDialog):
         self.__deleteButton.setText("Delete");
 
     def createLayout(self):
+        """レイアウト設定関数
+        
+        生成したWidgetクラスをレイアウトに設定する
+
+        Args:
+            None
+        Returns:
+            None
+        
+        """
         mainLayout = QtWidgets.QFormLayout(self);
 
         mainLayout.addRow(self.__createLocatorButton);
@@ -101,12 +173,31 @@ class MainWindow(QtWidgets.QDialog):
         mainLayout.addRow(self.__deleteButton);
 
     def createConnections(self):
+        """スロット設定関数
+        
+        各ウィジェットのスロットに関数を設定する
+
+        Args:
+            None
+        Returns:
+            None
+        """
         self.__createLocatorButton.clicked.connect(self.createLocator);
         self.__createCtrlButton.clicked.connect(self.attachMoveablePivotRig);
         self.__bakeButton.clicked.connect(self.bakeApply);
         self.__deleteButton.clicked.connect(self.deleteRig);
 
     def createLocator(self):
+        """ロケーター生成関数
+
+        選択されているオブジェクトと同一にロケーターを生成する
+
+        Args:
+            None
+        Returns:
+            None
+        """
+
         cmds.undoInfo(openChunk=True);
 
         selectedObjs = cmds.ls(sl=True);
@@ -123,10 +214,14 @@ class MainWindow(QtWidgets.QDialog):
         cmds.undoInfo(closeChunk=True);
 
     def attachMoveablePivotRig(self):
-        """
-        ・選択ロケーター位置に、offset＆Pivotコントローラを生成
-        ・指定コントローラの上位にコントローラを階層化。offsetグループと、negグループをはさむ
-        ・pivot_ctrl.Translate→composeMatrix→inverseMatrix→decomposeMatrix→nega.Translate
+        """外付けPivotリグをロケーター名に対応したコントローラに対しアタッチする関数
+
+        外付けPivotコントローラを生成し、対象となるコントローラへ接続を行う
+
+        Args:
+            None
+        Returns:
+            None
         """
 
         cmds.undoInfo(openChunk=True);
@@ -204,7 +299,9 @@ class MainWindow(QtWidgets.QDialog):
         inverseMat = cmds.createNode("inverseMatrix", n=pivotCtrl + "_rotatePivot_inverseMatrix");
         cmds.connectAttr("{}.outputMatrix".format(compoMat), "{}.inputMatrix".format(inverseMat));
         cmds.connectAttr("{}.outputMatrix".format(inverseMat), "{}.matrixIn[0]".format(multMat));
-        cmds.connectAttr("{}.worldInverseMatrix[0]".format("RIG_Chr025_script:all_translate_c"), "{}.matrixIn[1]".format(multMat));
+
+        topParentCtrl = self.getTopParentCtrl(targetCtrlName);
+        cmds.connectAttr("{}.worldInverseMatrix[0]".format(topParentCtrl), "{}.matrixIn[1]".format(multMat));
         cmds.connectAttr("{}.worldMatrix[0]".format(targetOffsetGrp), "{}.matrixIn[2]".format(multMat));
         cmds.connectAttr("{}.matrixSum".format(multMat), "{}.offsetParentMatrix".format(targetCtrlName));
 
@@ -214,6 +311,23 @@ class MainWindow(QtWidgets.QDialog):
         cmds.select(cl=True);
 
         cmds.undoInfo(closeChunk=True);
+
+    def getTopParentCtrl(self, targetCtrl):
+        checkTarget = targetCtrl;
+        checkFlag = True;
+
+        while checkFlag:
+            parent = cmds.listRelatives(checkTarget, parent=True, type="transform");
+            if (not parent is None) and len(parent) > 0:
+                shape = cmds.listRelatives(parent[0], shapes=True, type="nurbsCurve");
+                if (not shape is None) and len(shape) > 0:
+                    checkTarget = parent[0];
+                else:
+                    checkFlag = False;
+            else:
+                checkFlag = False;
+        
+        return checkTarget;
 
     def bakeApply(self):
         cmds.undoInfo(openChunk=True);

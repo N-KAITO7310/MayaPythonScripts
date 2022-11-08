@@ -14,6 +14,7 @@
     reload(bake);
     bake.showUi();
 
+    lastUpdated: 2022/10/31
 """
 # ------------------------------------------------------------------------------
 from __future__ import absolute_import, division, generators, print_function, unicode_literals
@@ -36,6 +37,7 @@ import os;
 import subprocess;
 from functools import partial;
 import maya.api.OpenMayaAnim as oma;
+import maya.mel as mel;
 
 # ------------------------------------------------------------------------------
 # constant var
@@ -48,6 +50,8 @@ FILE_FILTER = "*.fbx";
 FILE_EXTENSION = [".mb", ".ma", ".fbx"];
 FILE_SUFFIX = "Test1";
 CTRL_SUFFIX = "_c";
+NAMESPACE_SEPARATOR = ":";
+SPECIFIC_NAMESPACE = "CR_NAMESPACE";
 # jnt : [ctrl, maintainOffset, targetOffsetRotate]
 EXCEPTION_CONST_TABLE = {
     "L_arm" : ["L_arm_pole", True, [0, 0, 0]],
@@ -96,39 +100,6 @@ def getMayaWindow():
     else:
         # python2
         return shiboken2.wrapInstance(long(ptr), QtWidgets.QWidget)
-
-# ファイル名入力モーダルウィンドウ＊要件にないためコメントアウト
-# class ModalWindow(QtWidgets.QDialog):
-    
-#     def __init__(self, parent=getMayaWindow()):
-#         super(ModalWindow, self).__init__(parent)
-
-#         self.setWindowTitle("Input NewFileName")
-
-#         self.setWindowFlags(self.windowFlags() ^ QtCore.Qt.WindowContextHelpButtonHint)
-
-#         self.createWidgets()
-#         self.createLayout()
-#         self.createConnection()
-
-#     def createWidgets(self):
-#         self.textBox = QtWidgets.QLineEdit(self);
-#         self.okButton = QtWidgets.QPushButton(self);
-#         self.okButton.setText("OK");
-
-#     def createLayout(self):
-#         mainLayout = QtWidgets.QVBoxLayout(self);
-#         subLayout = QtWidgets.QFormLayout(self);
-#         subLayout.addRow("NewFileName:", self.textBox);
-
-#         mainLayout.addLayout(subLayout);
-#         mainLayout.addWidget(self.okButton);
-
-#     def createConnection(self):
-#         self.okButton.clicked.connect(self.accept);
-
-#     def getText(self):
-#         return self.textBox.text();
     
 class ConfirmWindow(QtWidgets.QDialog):
     """処理完了通知ウィンドウクラス
@@ -233,8 +204,9 @@ class MainWindow(QtWidgets.QDialog):
         この関数で行っていること
         ・ウィンドウタイトル設定
         ・UIサイズ設定
-        ・縦並びレイアウト設定
-        ・各ボタンとスロットの設定
+        ・ウィジェットオブジェクトの作成
+        ・レイアウト設定
+        ・スロットの設定
 
         Args:
             parent: (QtWidgets.QWidget): 親ウィンドウとして設定するインスタンス。デフォルトでMayaのウィンドウを指定。
@@ -247,7 +219,6 @@ class MainWindow(QtWidgets.QDialog):
         self.setObjectName(self.__class__.UI_NAME);
         self.setMinimumSize(200, 50);
         self.setWindowFlags(self.windowFlags() ^ QtCore.Qt.WindowContextHelpButtonHint)
-
 
         self.createWidgets();
         self.createLayout();
@@ -342,17 +313,32 @@ class MainWindow(QtWidgets.QDialog):
         fileCount = len(files);
 
         for i, filePath in enumerate(files):
+            # fbxデータimport時にnameSpaceを追加するため一時的にカレントnameSpaceを変更
+            # reference後に、importObjectsFromReferenceを行うことでもnameSpaceを付与することが可能。
+            currentNs = cmds.namespaceInfo(cur=True)
+            if not cmds.namespace(ex="{}".format(SPECIFIC_NAMESPACE)):
+                cmds.namespace(add="{}".format(SPECIFIC_NAMESPACE))
+            cmds.namespace(set=":{}".format(SPECIFIC_NAMESPACE))
+
             # Import animation file
-            imported = cmds.file(filePath, i=True, type="fbx", returnNewNodes=True, ignoreVersion=True, renameAll=True, mergeNamespacesOnClash=False, options="fbx", pr=True, force=True);
-            
+            mel.eval('FBXImport -f "{}"'.format(filePath));
+            # 一時的に変更したカレントnameSpaceをもとに戻す
+            cmds.namespace(set=currentNs);
+
+            # get imported nodes
+            imported = cmds.ls("{}::*".format(SPECIFIC_NAMESPACE));
+
+            if len(imported) < 1:
+                cmds.delete(imported);
+                continue;
+
             # change fps setting
             cmds.currentUnit(time=FPS_TIME_OPTIONS[self._fpsComboBox.currentIndex()]);
 
             importedJnts = self.extractJnts(imported);
-            importedJnts = self.convertPartialPathName(importedJnts);
-            if len(imported) < 1:
-                cmds.delete(imported);
-                continue;
+
+            # importされたノードの取得方法変更によりフルパスからの変更の必要なし。2022/10/31
+            # importedJnts = self.convertPartialPathName(importedJnts);
 
             # リグ・ジョイント情報の取得
             jntCtrlTable = self.analyzeRig(importedJnts);
@@ -374,11 +360,6 @@ class MainWindow(QtWidgets.QDialog):
 
             # インポートされたノードを削除
             cmds.delete(imported);
-
-            # ファイル名の入力処理
-            # newFileName = self.showModalWindow();
-            # if newFileName is None:
-            #     om.MGlobal.displayError("Please Input New File Name");
 
             # oldFilePath ,newFilePath = self.saveAs(filePath, newFileName);
             fileName = self.getFileName(filePath);
@@ -495,6 +476,7 @@ class MainWindow(QtWidgets.QDialog):
 
         return [node for node in objs if cmds.objectType(node) == "joint"];
         
+    # 削除予定。importされたノードの取得方法変更によりフルパスからの変更の必要なし。2022/10/31
     def convertPartialPathName(self, objs):
         """オブジェクトのフルパスをオブジェクト名に変換する関数
 
@@ -506,7 +488,6 @@ class MainWindow(QtWidgets.QDialog):
             [str]: オブジェクト名のリスト
         
         """
-
 
         paths = [];
         
@@ -536,16 +517,22 @@ class MainWindow(QtWidgets.QDialog):
 
         """
         jntCtrlTable = {};
-        nameSpace = "s:"
         
         mainJnts = [];
         for importedJnt in importedJnts:
-            jntName = nameSpace + importedJnt;
+            jntName = importedJnt.split(NAMESPACE_SEPARATOR)[-1];
 
-            mainJnt = cmds.ls(jntName, type="joint");
-            if not mainJnt is None and len(mainJnt) > 0:
-                mainJnt = mainJnt[0];
-                mainJnts.append(mainJnt);
+            # リグファイルのネームスペースが一定でない可能性があるため、全てのネームスペースから一致するジョイントを取得
+            searched = cmds.ls("::{}".format(jntName), type="joint");
+
+            if (not searched is None) and len(searched) > 0:
+                if len(searched) > 1:
+                    # インポートファイルに既定のネームスペースに一致しないジョイントのみを取得
+                    mainJnt = [x for x in searched if not SPECIFIC_NAMESPACE in x][0];
+                    mainJnts.append(mainJnt);
+                else:
+                    mainJnt = mainJnt[0];
+                    mainJnts.append(mainJnt);
             
         for mainJnt in mainJnts:
             doSearch = True;
@@ -579,13 +566,15 @@ class MainWindow(QtWidgets.QDialog):
                     else:
                         rotOffsets = [0, 0, 0];
 
-                    jntCtrlTable[mainJnt.split(nameSpace)[1]] = [[sourceCtrl, False, rotOffsets]];
+                    mainJntWithoutNameSpace = mainJnt.split(NAMESPACE_SEPARATOR)[-1];
+                    importedJntName = SPECIFIC_NAMESPACE + NAMESPACE_SEPARATOR + mainJntWithoutNameSpace;
+                    jntCtrlTable[importedJntName] = [[sourceCtrl, False, rotOffsets]];
                     doSearch = False;
                 else:
                     searchStartObj = sourceCtrl;
                     # リグの構造上、後の対象がorientConstraintのみとなるため取得タイプを変更
                     listConType = "orientConstraint"
-        print(jntCtrlTable)
+
         return jntCtrlTable;
 
     def addExceptionToTable(self, dict):
@@ -595,10 +584,11 @@ class MainWindow(QtWidgets.QDialog):
 
         """
         for key, value in EXCEPTION_CONST_TABLE.items():
+            importedJntName = SPECIFIC_NAMESPACE + NAMESPACE_SEPARATOR + key;
             if key in dict:
-                dict[key].append([value[0], value[1], value[2]]);
+                dict[importedJntName].append([value[0], value[1], value[2]]);
             else:
-                dict[key] = [[value[0], value[1], value[2]]];
+                dict[importedJntName] = [[value[0], value[1], value[2]]];
 
         return dict;
 
@@ -619,7 +609,7 @@ class MainWindow(QtWidgets.QDialog):
             for child in children:
                 isUnLockTrans = self.checkLockState(child[0], "tx");
                 isUnLockRot = self.checkLockState(child[0], "rx");
-                print(child)
+
                 if isUnLockTrans:
                     # 鎖骨のみparentConstraintオフセットなし&orientConstraintオフセットありとしたいため特例の対応
                     if "collar_c" in  child[0]:
@@ -666,10 +656,8 @@ class MainWindow(QtWidgets.QDialog):
             list: オブジェクト群に打たれたkeyframeのtimeの最小値、最大値
 
         """
-        # animCurves = [];
         startF = 0;
         endF = 0;
-        # animCurveFn = oma.MFnAnimCurve();
 
         for target in targets:
             tempStartF = cmds.findKeyframe(target, which="first");
@@ -680,38 +668,8 @@ class MainWindow(QtWidgets.QDialog):
             if tempEndF > endF:
                 endF = tempEndF;
 
-            # case of om
-            # for animCurveType in ANIMCURVE_TYPES:
-            #     tempAnimCurves = cmds.listConnections(target, type=animCurveType);
-            #     for tempAnimCurve in tempAnimCurves:
-            #         animCurves.append(tempAnimCurve);
-
-            # for animCurve in animCurves:
-            #     MSel = om.MSelectionList();
-            #     MSel.add(animCurve);
-            #     MAnimCurve = MSel.getDependNode(0);
-
-            #     if animCurveFn.hasObj(MAnimCurve):
-            #         animCurveFn.setObject(MAnimCurve);
-
-            #         tempStartF = animCurveFn.input(0).value;
-            #         if tempStartF < startF:
-            #             startF = tempStartF;
-
-            #         tempEndF = animCurveFn.input(int(animCurveFn.numKeys)-1).value;
-            #         if tempEndF > endF:
-            #             endF = tempEndF;
 
         return [startF, endF];
-
-    # def showModalWindow(self):
-    #     modalWindow = ModalWindow();
-    #     result = modalWindow.exec_();
-
-    #     if result == QtWidgets.QDialog.Accepted:
-    #         return modalWindow.getText();
-    #     else:
-    #         return None;
 
     def showProgressDialog(self):
         """プログレスバーの表示関数

@@ -92,15 +92,17 @@ class MainWindow(QtWidgets.QDialog):
 
     def createWidgets(self):
         self.__textbox = QtWidgets.QLineEdit(self);
+        self.__curveName = QtWidgets.QLineEdit(self);
 
         self.__createButton = QtWidgets.QPushButton(self);
         self.__createButton.setText("Create");
 
     def createLayout(self):
-        mainLayout = QtWidgets.QVBoxLayout(self);
+        mainLayout = QtWidgets.QFormLayout(self);
 
-        mainLayout.addWidget(self.__textbox);
-        mainLayout.addWidget(self.__createButton);
+        mainLayout.addRow("TransformCtrlName", self.__textbox);
+        mainLayout.addRow("CurveName", self.__curveName);
+        mainLayout.addRow(self.__createButton);
 
     def createConnections(self):
         self.__createButton.clicked.connect(self.crateFixedIkSplineSystem);
@@ -127,19 +129,21 @@ class MainWindow(QtWidgets.QDialog):
         startJnt = ikJnts[0];
         endJnt = ikJnts[-1];
 
-        # get jnt positions
-        jntPointList = [];
-        for ikJnt in ikJnts:
-            position = cmds.xform(ikJnt, q=True, translation=True, worldSpace=True);
-            jntPointList.append(position);
+        curve = self.__curveName.text();
+        if curve is None or curve == "":
+            # get jnt positions
+            jntPointList = [];
+            for ikJnt in ikJnts:
+                position = cmds.xform(ikJnt, q=True, translation=True, worldSpace=True);
+                jntPointList.append(position);
 
-        # create curve and clsuter and ikHandle
-        curve = cmds.curve(bezier=True, d=3, p=jntPointList);
+            # create curve and clsuter and ikHandle
+            curve = cmds.curve(bezier=True, d=3, p=jntPointList);
         
-        clusterList = [];
-        for i in range(len(ikJnts)):
-            cluster = cmds.cluster("{}.cv[{}]".format(curve, i))[1];
-            clusterList.append(cluster);
+        # clusterList = [];
+        # for i in range(len(ikJnts)):
+        #     cluster = cmds.cluster("{}.cv[{}]".format(curve, i))[1];
+        #     clusterList.append(cluster);
 
         ikHandle = cmds.ikHandle(sj=startJnt, ee=endJnt, curve=curve, sol="ikSplineSolver", ccv=False)[0];
 
@@ -194,13 +198,13 @@ class MainWindow(QtWidgets.QDialog):
             pmaList.append(pma);
         
         # create groups
-        cGrp = cmds.ls("fixedIkSplineSystem_cluster_grp");
-        if cGrp is None or len(cGrp) == 0:
-            cGrp = cmds.group(em=True, n="fixedIkSplineSystem_cluster_grp", world=True);
-            cmds.parent(clusterList, cGrp);
-        else:
-            cGrp = cGrp[0];
-            cmds.parent(clusterList, cGrp, world=True);
+        # cGrp = cmds.ls("fixedIkSplineSystem_cluster_grp");
+        # if cGrp is None or len(cGrp) == 0:
+        #     cGrp = cmds.group(em=True, n="fixedIkSplineSystem_cluster_grp", world=True);
+        #     cmds.parent(clusterList, cGrp);
+        # else:
+        #     cGrp = cGrp[0];
+        #     cmds.parent(clusterList, cGrp, world=True);
 
         locGrp = cmds.ls("fixedIkSplineSystem_loc_grp");
         if locGrp is None or len(locGrp) == 0:
@@ -252,8 +256,10 @@ class MainWindow(QtWidgets.QDialog):
         # transform ctrl scale
         transformCtrl = self.__textbox.text();
         if not transformCtrl == "":
-            transformScalePMA = cmds.createNode("plusMinusAverage", n="{}_scale_PMA".format(transformCtrl));
-            cmds.setAttr("{}.operation".format(transformScalePMA), 3);
+            transformScalePMA = cmds.ls("{}_scale_PMA".format(transformCtrl));
+            if transformScalePMA is None:
+                transformScalePMA = cmds.createNode("plusMinusAverage", n="{}_scale_PMA".format(transformCtrl));
+                cmds.setAttr("{}.operation".format(transformScalePMA), 3);
             for i, axis in enumerate(AXIS_LIST):
                 cmds.connectAttr("{}.scale{}".format(transformCtrl, axis), "{}.input1D[{}]".format(transformScalePMA, i));
 

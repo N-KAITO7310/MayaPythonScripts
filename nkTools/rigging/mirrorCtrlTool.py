@@ -18,6 +18,8 @@ import pymel.core as pm;
 '''
 
 def mirrorCtrlTool():
+    cmds.undoInfo(openChunk=True);
+
     # 選択されたCtrlを取得
     selected = cmds.ls(sl=True);
 
@@ -50,7 +52,7 @@ def mirrorCtrlTool():
 
         #if joint doesnt exists, fail
         if cmds.objExists(jnt) == False:
-            print 'cant find joint, please create joint or rename joint to Jnt';
+            print('cant find joint, please create joint or rename joint to Jnt');
 
         #create null grp 
         nullGrp = cmds.group(em=True, n=OsideJnt + '_null');
@@ -158,6 +160,7 @@ def mirrorCtrlTool():
                         print("Not applicable constraint");
                         continue;
 
+    cmds.undoInfo(closeChunk=True);
 
 # apply
 def main():
