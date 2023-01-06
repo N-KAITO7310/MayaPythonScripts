@@ -567,6 +567,7 @@ for target in targets:
     cmds.skinCluster(inf, target, dr=4.0, toSelectedBones=True,skinMethod=1, wd=1, obeyMaxInfluences=False, bindMethod=1, normalizeWeights=1);
     
 # generate joint Opposite side and rename
+cmds.undoInfo(openChunk=True);
 jnts = cmds.ls(sl=True, type="joint");
 for jnt in jnts:
     cmds.select(cl=True);
@@ -577,6 +578,64 @@ for jnt in jnts:
     cmds.setAttr("{}.translateX".format(newJnt), oppositeXtrans);
     
     # rename
-    side = newJnt.split("_");
-    cmds.rename()
+    splited = jnt.split("_");
+    side = splited[0];
+    sidePrefix = "";
+    if not ("l" in side) and not ("r" in side):
+        continue;
+    else:
+        if "l" in side:
+            sidePrefix = "r_";
+        elif "r" in side:
+            sidePrefix = "l_";
     
+    newName = sidePrefix + "_".join(splited[1:]);
+    cmds.rename(newJnt, newName);
+    
+cmds.undoInfo(closeChunk=True);
+    
+# delete unknowns nodes
+unknowns = cmds.ls(type="unknown");
+print(unknowns)
+cmds.delete(unknowns);
+
+# generate offset and connect ctrl to jnt
+jnts = cmds.ls(sl=True);
+attrs = ["translate", "rotate"]
+for jnt in jnts:
+    duplicated = cmds.duplicate(jnt, parentOnly=True)[0]
+    print(duplicated)
+    duplicated = cmds.rename(duplicated, duplicated[:-1] + "_offset");
+    cmds.parent(jnt, duplicated);
+    
+    ctrl = jnt.split("_jnt")[0] + "_ctrl";
+    for attr in attrs:
+        cmds.connectAttr("{}.{}".format(ctrl, attr), "{}.{}".format(jnt, attr));
+        
+# mesh controls
+sourceAttr = ""# input ctrl attr
+bs = ""# input bsName
+weightName = ""# weight
+targetMesh = ""# target deformed mesh
+ctrlMesh = cmds.duplicate(targetMesh, parentOnly=True, renameChildren=True, name="{}_{}_ctrl".format(targetMesh, weightName))[0];
+ctrlMeshShape = cmds.listRelatives(s=True, type="mesh")[0];
+
+cmds.connectAttr(sourceAttr, bs + weightName);
+tGeo = cmds.createNode("transformGeometry", n="{}_tGeo".format(targetMesh))
+cmds.connectAttr("{}.outMesh".format(targetMesh), "{}.inputGeometry".format(tGeo));
+cmds.connectAttr("{}.worldInverseMatrix[0]".format(ctrlMesh), "{}.transform".format(tGeo));
+cmds.connectAttr("{}.outputGeometry", "{}.inMesh".format(ctrlMeshShape));
+
+mat = cmds.shadingNode("lambert", n="forMeshControls", asShader=True);
+cmds.sets(mat, renderable=True, noSurfaceShader=True, empty=True, name="lambert2SG");
+cmds.connectAttr("{}.outColor".format(mat), "lambert2SG.surfaceShader", f=True);
+cmds.setAttr("{}.transparency".format(mat), [1, 1, 1], type="double3");
+# and... show>SelectionHighlighting
+"""
+リグへの使用
+・分割したメッシュコントローラを用意
+・既存のコントローラにペアレント＆フリーズ＆アンペアレント
+・フリーズ時作成されたtransformGeometryノードのtransformにコントローラのworldMatrixを接続
+・transformGeometryのinvertTransformをオン
+・メッシュシェイプを対象のカーブコントローラにparent -relative -shape で追加
+"""
