@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import maya.cmds as cmds;
 
 # delete under follicle curve
@@ -91,7 +92,7 @@ pma = cmds.shadingNode("plusMinusAverage", au=True, n=prefix + "Blink_PMA");
 cmds.connectAttr(eyeControl + ".BlinkHeight", pma + ".input1D[0]");
 cmds.connectAttr(eyeControl + ".BlinkHeight", pma + ".input1D[1]");
 cmds.disconnectAttr(eyeControl + ".BlinkHeight", pma + ".input1D[1]");
-# input1D[1]縺ｸ縺ｮ蜈･蜉帙蜷さ繝ｳ繝医Ο繝ｼ繝ｩ縺ｮ蝗櫁ｻ｢蛟､豈弱↓謇句虚縺ｧ陦後≧
+# input1D[1]縺ｸ縺ｮ蜈･蜉幢ｿｽ蜷ゑｿｽ繝ｳ繝医Ο繝ｼ繝ｩ縺ｮ蝗櫁ｻ｢蛟､豈弱↓謇句虚縺ｧ陦後≧
 cmds.connectAttr(pma + ".output1D", remap + ".outputMax");
 
 # follow Eye
@@ -290,7 +291,7 @@ for jnt in stretchJnts:
         cmds.connectAttr(scaleBC + ".color1R", jnt + ".scaleX");
         
 
-# proximityPin逕ｨ縺ｮ繧ｳ繝ｳ繝医Ο繝ｼ繝ｩ繧ｰ繝ｫ繝ｼ繝励↓繝峨Λ繧､繝舌ｒ險ｭ螳壹＠繧ｳ繝ｳ繧ｹ繝医Ξ繧､繝ｳ繝医☆繧ProximityPin縺ｯ謇句虚縺ｧ陦後≧)
+# proximityPin逕ｨ縺ｮ繧ｳ繝ｳ繝医Ο繝ｼ繝ｩ繧ｰ繝ｫ繝ｼ繝励↓繝峨Λ繧､繝舌ｒ險ｭ螳壹＠繧ｳ繝ｳ繧ｹ繝医Ξ繧､繝ｳ繝医☆ｽProximityPin縺ｯ謇句虚縺ｧ陦後≧)
 targetGrps = cmds.ls(sl=True);
 for targetGrp in targetGrps:
     target = str(targetGrp);
@@ -302,7 +303,7 @@ for targetGrp in targetGrps:
     ctrl = str(cmds.listRelatives(auto, c=True)[0]);
     cmds.pointConstraint(driverGrp, auto, mo=False);
 
-# follow繧ｳ繝ｳ繝医Ο繝ｼ繝ｩ縺ｨ繧ｹ繧ｭ繝ｳ繧ｸ繝ｧ繧､繝ｳ繝育畑繧ｳ繝ｳ繝医Ο繝ｼ繝ｩ縺ｨ繧呈磁邯壹☆繧
+# follow繧ｳ繝ｳ繝医Ο繝ｼ繝ｩ縺ｨ繧ｹ繧ｭ繝ｳ繧ｸ繝ｧ繧､繝ｳ繝育畑繧ｳ繝ｳ繝医Ο繝ｼ繝ｩ縺ｨ繧呈磁邯壹☆ｽ
 ctrls = cmds.ls(sl=True);
 for ctrl in ctrls:
     followCtrl = str(ctrl);
@@ -384,8 +385,9 @@ result = pointB + (PBNorm * 5);
 cmds.xform("IK_PV_Ctrl_Offset_Grp", t=result);   
     
 # implicit
-cmds.createNode("implicitCone");
-cmds.createNode("implicitSphere");
+cmds.createNode('implicitCone')
+cmds.createNode('implicitSphere')
+cmds.createNode('implicitBox')
 
 # create fixed Ik Stretch System
 curveShape = "HydraTail_curveShape";
@@ -631,11 +633,48 @@ cmds.sets(mat, renderable=True, noSurfaceShader=True, empty=True, name="lambert2
 cmds.connectAttr("{}.outColor".format(mat), "lambert2SG.surfaceShader", f=True);
 cmds.setAttr("{}.transparency".format(mat), [1, 1, 1], type="double3");
 # and... show>SelectionHighlighting
-"""
-リグへの使用
-・分割したメッシュコントローラを用意
-・既存のコントローラにペアレント＆フリーズ＆アンペアレント
-・フリーズ時作成されたtransformGeometryノードのtransformにコントローラのworldMatrixを接続
-・transformGeometryのinvertTransformをオン
-・メッシュシェイプを対象のカーブコントローラにparent -relative -shape で追加
-"""
+
+# connect ref rig jnt to original jnt
+import maya.cmds as cmds;
+
+axisList = ["X", "Y", "Z"];
+attrList = ["translate", "rotate", "scale"];
+
+origJntNameSpace = "";# set nameSpace string
+rigJntNameSpace = "";
+
+origJnts = cmds.ls("{}::*_jnt".format(origJntNameSpace), type="joint");
+rigJnts = cmds.ls("{}::*_jnt".format(rigJntNameSpace), type="joint");
+
+for rigJnt in rigJnts:
+    targetJntName = rigJnt;# rigJnt.replace("***", "***");
+    isExist = targetJntName in origJnts;
+    targetJnt = "";
+    if isExist:
+        targetJnt = ctrls[ctrls.index(targetJntName)];
+    else:
+        continue;
+   
+    for attr in attrList:
+        for axis in axisList:
+            cmds.connectAttr("{}.{}{}".format(rigJnt, attr,axis), "{}.{}{}".format(targetJnt, attr,axis));
+            
+# bifrost spring connection
+count = 0;
+for i in range(201):
+    loc = cmds.spaceLocator(name="test_{}_loc".format(i))[0];
+    cmds.connectAttr(graph + ".translate[{}]".format(i), loc + ".translate", f=1);
+    cmds.connectAttr(graph + ".rotate[{}]".format(i), loc + ".rotate", f=1);
+    cmds.connectAttr(graph + ".scale[{}]".format(i), loc + ".scale", f=1);
+    
+    if i % 5 == 0:
+        cmds.select(cl=True)
+        duplicated = cmds.duplicate("robot_eyes_cleannuped0320:robot_eye_A")[0];
+        duplicated = cmds.rename(duplicated, "robot_eye_A" + str(count));
+        cmds.connectAttr(graph + ".translate[{}]".format(i), duplicated + ".translate", f=1);
+        cmds.connectAttr(graph + ".rotate[{}]".format(i), duplicated + ".rotate", f=1);
+        cmds.connectAttr(graph + ".scale[{}]".format(i), duplicated + ".scale", f=1);
+        group = cmds.group(duplicated, name=duplicated + "_grp");
+        cmds.setAttr(group + ".translateZ", count * -20);
+        
+        count = count + 1;

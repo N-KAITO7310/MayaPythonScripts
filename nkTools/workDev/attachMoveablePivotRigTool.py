@@ -52,6 +52,9 @@ LOCATOR_SUFFIX = "_loc";
 AXIS_LIST = ["X", "Y", "Z"];
 TRANSLATION_ATTRS = ["tx", "ty", "tz"];
 ROTATE_ATTRS = ["rx", "ry", "rz"];
+SHAPE_ENUM_CROSS = 0;
+SHAPE_ENUM_SPHERE = 1;
+SHAPE_ENUM_OCTAHEDRON = 2;
 
 def maya_useNewAPI():
     """Maya Python API 2.0 の明示的な使用宣言
@@ -216,7 +219,7 @@ class MainWindow(QtWidgets.QDialog):
     def attachMoveablePivotRig(self):
         """外付けPivotリグをロケーター名に対応したコントローラに対しアタッチする関数
 
-        外付けPivotコントローラを生成し、対象となるコントローラへ接続を行う
+        外付けPivotコントローラノード群を生成し、階層変更は行わず対象となるコントローラへ接続を行う
 
         Args:
             None
@@ -250,28 +253,19 @@ class MainWindow(QtWidgets.QDialog):
         if parentObj is None or len(parentObj) == 0:
             om.MGlobal.displayError("Error! target ctrl dont have parent");
 
-        # ターゲットコントロールにオフセットを作成
+        # ターゲットコントロールのオフセットを持ったグループを作成
         targetOffsetGrp = cmds.group(em=True, n="{}{}".format(targetCtrlName, OFFSET_GRP_SUFFIX));
-        # ターゲットコントロールの移動値を保持、matrixを0にし、デフォルト位置に戻す。フリーズがかかっているためロケーターを利用して保持
-        tempPosLoc = cmds.spaceLocator();
-        cmds.delete(cmds.parentConstraint(targetCtrlName, tempPosLoc));
-        currentTrans = cmds.getAttr("{}.translate".format(targetCtrlName));
-        currentRot = cmds.getAttr("{}.rotate".format(targetCtrlName))
-        cmds.xform(targetCtrlName, ws=True, translation=[0, 0, 0], rotation=[0, 0, 0]);
+
         # オフセットグループをターゲットコントロールのデフォルト位置にスナップ
         cmds.delete(cmds.parentConstraint(targetCtrlName, targetOffsetGrp, mo=False));
-        # オフセットグループをターゲットの上位ノード下にペアレント
-        cmds.parent(targetOffsetGrp, parentObj);
-        # ターゲットコントロールを元あった位置に戻す
-        cmds.delete(cmds.parentConstraint(tempPosLoc, targetCtrlName));
-        cmds.delete(tempPosLoc);
-
+        
         # ピボットコントローラ、オフセットを作成
         pivotCtrlOffsetGrp = cmds.group(em=True, n="{}{}".format(pivotCtrlName, OFFSET_GRP_SUFFIX));
         shapeNum = self.__shapeCombo.currentIndex();
         pivotCtrl = self.createCtrlCurve(targetCtrlName, shapeNum);
         cmds.parent(pivotCtrl, pivotCtrlOffsetGrp);
 
+        # pivotコントローラ移動とは逆の移動値をセットするnegaグループを作成
         negaGrp = cmds.group(em=True, parent=pivotCtrl, n="{}{}".format(targetCtrlName, NEGA_GRP_SUFFIX));
         cmds.xform(pivotCtrlOffsetGrp, matrix=pivotMat, ws=True);
 
@@ -289,30 +283,47 @@ class MainWindow(QtWidgets.QDialog):
 
         cmds.parent(targetOffsetGrp, negaGrp);
 
+        # 元アニメーションを保持するためのロケータを作成しベイク処理
+        animPreserveLoc = cmds.spaceLocator(n="{}_animPreserve_loc".format(targetCtrlName))[0];
+        cmds.parent(animPreserveLoc, parentObj);
+
+        # locatorの原点をコントローラ0位置に移動、フリーズしスペースを合わせる
+        targetCurrentMat = cmds.xform(targetCtrlName, q=True, matrix=True);
+        zeroMat = om.MMatrix();
+        cmds.xform(targetCtrlName, matrix=zeroMat);
+        cmds.matchTransform(animPreserveLoc, targetCtrlName, pos=True, rot=True);
+        cmds.makeIdentity(animPreserveLoc, translate=True, rotate=True, apply=True);
+        cmds.xform(targetCtrlName, matrix=targetCurrentMat);
+
+        tempPConst = cmds.parentConstraint(targetCtrlName, animPreserveLoc, mo=False);
+        targetStartF, targetEndF = self.checkKeyframeRange(targetCtrlName);
+        cmds.bakeResults(animPreserveLoc, t=(targetStartF, targetEndF), at=TRANSLATION_ATTRS+ROTATE_ATTRS, simulation=False);
+        cmds.delete(tempPConst);
+        cmds.setAttr("{}.visibility".format(animPreserveLoc), 0);
+
         # connect targetRig pivotRigSystem
         cmds.parentConstraint(parentObj, pivotCtrlOffsetGrp, mo=True);
-        multMat = cmds.createNode("multMatrix", n=pivotCtrlName + "_multMat");
-        rotatePivot = cmds.getAttr("{}.rotatePivot".format(targetCtrlName))[0];
-        compoMat = cmds.createNode("composeMatrix", n=pivotCtrl + "_rotatePivot_composeMatrix");
-        for i, rp in enumerate(rotatePivot):
-            cmds.setAttr("{}.inputTranslate{}".format(compoMat, AXIS_LIST[i]), rp);
-        inverseMat = cmds.createNode("inverseMatrix", n=pivotCtrl + "_rotatePivot_inverseMatrix");
-        cmds.connectAttr("{}.outputMatrix".format(compoMat), "{}.inputMatrix".format(inverseMat));
-        cmds.connectAttr("{}.outputMatrix".format(inverseMat), "{}.matrixIn[0]".format(multMat));
 
-        topParentCtrl = self.getTopParentCtrl(targetCtrlName);
-        cmds.connectAttr("{}.worldInverseMatrix[0]".format(topParentCtrl), "{}.matrixIn[1]".format(multMat));
-        cmds.connectAttr("{}.worldMatrix[0]".format(targetOffsetGrp), "{}.matrixIn[2]".format(multMat));
-        cmds.connectAttr("{}.matrixSum".format(multMat), "{}.offsetParentMatrix".format(targetCtrlName));
+        # cmds.connectAttr("{}.matrixSum".format(multMat), "{}.offsetParentMatrix".format(targetCtrlName));
+        pConst = cmds.parentConstraint(targetOffsetGrp, targetCtrlName, mo=True);
 
-        cmds.setAttr("{}.translate".format(targetCtrlName), currentTrans[0][0], currentTrans[0][1], currentTrans[0][2], type="float3");
-        cmds.setAttr("{}.rotate".format(targetCtrlName), currentRot[0][0], currentRot[0][1], currentRot[0][2], type="double3");
         cmds.delete(pivotPosLoc);
         cmds.select(cl=True);
 
         cmds.undoInfo(closeChunk=True);
 
     def getTopParentCtrl(self, targetCtrl):
+        """対象コントローラが存在する階層の最上位nurbsCurveオブジェクトを取得する関数
+
+        引数に指定したオブジェクトからたどり、最上位のnurbsCurveオブジェクトを取得する
+        ＊階層途中にnurbsCurve以外のノード(joint, nullなど)が存在する場合については未対応。
+
+        Args:
+            targetCtrl: (string): pivotCtrl下で操作したいターゲットとなるコントローラ名文字列。
+        Returns:
+            checkTarget: (string): 最上位階層のnurbsCurveオブジェクト
+        """
+
         checkTarget = targetCtrl;
         checkFlag = True;
 
@@ -330,11 +341,26 @@ class MainWindow(QtWidgets.QDialog):
         return checkTarget;
 
     def bakeApply(self):
+        """対象のコントローラにベイク処理を行い、Pivotコントローラを削除する関数
+        
+        対象コントローラへpivotCtrlからの座標変換をベイクする。
+        キーフレーム範囲は対象となるコントローラ>pivotCtrlで参照。
+        実装時対象コントローラがフリーズを行った０位置に戻らなくなる現象がみられたため、
+        実質的にはロケーターへベイク後、そのロケーターへ位置合わせ・キーを打つことによって実装。
+
+        Args:
+            None
+        Returns:
+            None
+        """
+
         cmds.undoInfo(openChunk=True);
 
-        sel = cmds.ls(sl=True);
-        # ベイクしたいpivotCtrlを選択して実行。ベイク、アンペアレント＆りペアレント、不要になったコントローラ群を削除
+        # ベイクしたいpivotCtrlを選択して実行
         pivotCtrl, targetCtrl = self.getPivotCtrlAndTargetCtrl();
+
+        # アニメーション保持用ロケータを取得
+        animPreserveLoc = cmds.ls("{}_animPreserve_loc".format(targetCtrl))[0];
 
         # check keyframe
         keyCount = cmds.keyframe(pivotCtrl, q=True, keyframeCount=True);
@@ -342,37 +368,67 @@ class MainWindow(QtWidgets.QDialog):
             om.MGlobal.displayError("Please keyframe pivotCtrl");
             return;
 
-        # bake frame targetにキーがある場合はその範囲、キーがない場合はピボットコントローラのキーフレーム範囲を参照する
-        startF = cmds.findKeyframe(targetCtrl, which="first");
-        endF = cmds.findKeyframe(targetCtrl, which="last");
-        if startF == endF:
-            startF = cmds.findKeyframe(pivotCtrl, which="first");
-            endF = cmds.findKeyframe(pivotCtrl, which="last");
+        # bakeを行うframe範囲の決定。targetCtrl、pivotCtrlがもつキーフレーム範囲のうち大きい(小さい)方を参照する
+        targetStartF, targetEndF = self.checkKeyframeRange(animPreserveLoc);
+        pivotStartF, pivotEndF = self.checkKeyframeRange(pivotCtrl);
 
-        # ready source
-        tempLoc = cmds.spaceLocator();
-        tempConst = cmds.parentConstraint(targetCtrl, tempLoc);
-        cmds.bakeResults(tempLoc, t=(startF, endF), at=TRANSLATION_ATTRS+ROTATE_ATTRS, simulation=False);
-        cmds.bakeResults(targetCtrl, t=(startF, endF), at=TRANSLATION_ATTRS+ROTATE_ATTRS, simulation=False);
-        cmds.delete(tempConst);
+        # 元アニメーションを保持する範囲を決定
+        preservePreFrameRange = [];
+        if targetStartF >= pivotStartF:
+            # フレームが同じ場合 or ピボットコントロールのキーフレームがターゲットよりも小さい場合＝前範囲の元アニメーションを維持する必要のない場合
+            preservePreFrameRange = None;
+        else:
+            # ピボットコントロールのキーフレームがターゲットよりも大きい場合＝前範囲の元アニメーションを維持する必要がある場合
+            preservePreFrameRange = [targetStartF, pivotStartF];
+
+        preserveAfterFrameRange = [];
+        if targetEndF <= pivotEndF:
+            preserveAfterFrameRange = None;
+        else:
+            preserveAfterFrameRange = [pivotEndF+1, targetEndF+1];
+
+        # bake
+        cmds.bakeResults(targetCtrl, t=(pivotStartF, pivotEndF), at=TRANSLATION_ATTRS+ROTATE_ATTRS, simulation=False);
+
+        keyFrameDict = {};
+        # 保持したアニメーションを再適用
+        if not preservePreFrameRange is None:
+            for i in range(preservePreFrameRange[0], preservePreFrameRange[1]):
+                locTrans = cmds.getAttr("{}.translate".format(animPreserveLoc), time=i)[0];
+                locRot = cmds.getAttr("{}.rotate".format(animPreserveLoc), time=i)[0];
+
+                keyFrameDict[i] = [locTrans, locRot];
+
+        if not preserveAfterFrameRange is None:
+            for i in range(preserveAfterFrameRange[0], preserveAfterFrameRange[1]):
+                locTrans = cmds.getAttr("{}.translate".format(animPreserveLoc), time=i)[0];
+                locRot = cmds.getAttr("{}.rotate".format(animPreserveLoc), time=i)[0];
+
+                keyFrameDict[i] = [locTrans, locRot];
+
+        # set Preserved keyFrames
+        for frame, values in keyFrameDict.items():
+            for i, axis in enumerate(AXIS_LIST):
+                cmds.setKeyframe(targetCtrl, value=values[0][i], time=frame, at="translate{}".format(axis));
+                cmds.setKeyframe(targetCtrl, value=values[1][i], time=frame, at="rotate{}".format(axis));
 
         # delete pivot rig
         self.deleteRig(pivotCtrl, targetCtrl);
 
-        # tempLocのsourceとして対象となるキーフレームでtargetを位置合わせする
-        currentTime = cmds.currentTime(q=True);
-        for frame in range(int(startF), int(endF) + 1):
-            cmds.currentTime(frame);
-            cmds.matchTransform(targetCtrl, tempLoc, pos=True, rot=True);
-            cmds.setKeyframe(targetCtrl, breakdown=0, preserveCurveShape=0, hierarchy="none", controlPoints=0, shape=0, attribute="translate");
-            cmds.setKeyframe(targetCtrl, breakdown=0, preserveCurveShape=0, hierarchy="none", controlPoints=0, shape=0, attribute="rotate");
-
-        cmds.currentTime(currentTime);
-        cmds.delete(tempLoc);
-
         cmds.undoInfo(closeChunk=True);
 
     def delete(self):
+        """生成したpivotCtrlを削除する関数
+
+        pivotCtrlを削除する。
+        ウィジェットでのスロット設定、undoInfoコマンド、他の関数からの呼び出しの都合上実処理は切り出し。        
+
+        Args:
+            None
+        Returns:
+            None
+        """
+
         cmds.undoInfo(openChunk=True);
 
         self.deleteRig();
@@ -380,21 +436,34 @@ class MainWindow(QtWidgets.QDialog):
         cmds.undoInfo(closeChunk=True);
 
     def deleteRig(self, pivotCtrl=None, targetCtrl=None):
+        """生成したpivotCtrlを削除する関数
+
+        pivotCtrlを削除する。
+        ウィジェットでのスロット設定、undoInfoコマンド、他の関数からの呼び出しの都合上実処理は切り出し。        
+
+        Args:
+            pivotCtrl: (string): このツールにより生成されるピボットコントローラ名文字列。
+            targetCtrl: (string): pivotCtrl下で操作したいターゲットとなるコントローラ名文字列。
+        Returns:
+            None
+        """
+
         if pivotCtrl is None and targetCtrl is None:
             pivotCtrl, targetCtrl = self.getPivotCtrlAndTargetCtrl();
+
+        animPreserveLoc = cmds.ls("{}_animPreserve_loc".format(targetCtrl))[0];
+        cmds.delete(animPreserveLoc);
 
         # breakConnection
         tempNull = cmds.group(em=True);
         cmds.matchTransform(tempNull, targetCtrl, pos=True, rot=True);
-        cmds.disconnectAttr("{}.matrixSum".format(pivotCtrl + "_multMat"), "{}.offsetParentMatrix".format(targetCtrl));
-
-        # reset offsetParentMatrix
-        defaultMat = om.MMatrix();
-        cmds.setAttr("{}.offsetParentMatrix".format(targetCtrl), defaultMat, type="matrix");
-        tempConst = cmds.parentConstraint(tempNull, targetCtrl, mo=False);
 
         # delete
-        cmds.delete(pivotCtrl + "_multMat", tempNull, tempConst, pivotCtrl + OFFSET_GRP_SUFFIX);
+        cmds.delete(pivotCtrl + OFFSET_GRP_SUFFIX);
+
+        cmds.matchTransform(targetCtrl, tempNull, pos=True, rot=True);
+
+        cmds.delete(tempNull);
 
         # check pivotCtrlGrp
         pivotCtrlGrp = cmds.ls(PIVOT_CTRL_GRP);
@@ -405,6 +474,17 @@ class MainWindow(QtWidgets.QDialog):
                 cmds.delete(pivotCtrlGrp);
 
     def getPivotCtrlAndTargetCtrl(self):
+        """選択からピボットコントローラ、その名称からターゲットとなるコントローラ名を取得する関数
+
+        選択からピボットコントローラ、その名称からターゲットとなるコントローラ名を取得し、それぞれをリストで返す。
+
+        Args:
+            None
+        Returns:
+            pivotCtrl: (string): ピボットコントローラ名文字列
+            targetCtrl: (string): ピボットコントローラ下の対象となるコントローラ名文字列
+        """
+
         pivotCtrl = cmds.ls(sl=True);
         if pivotCtrl is None or len(pivotCtrl) == 0:
             om.MGlobal.displayError("Please Select pivot controller");
@@ -418,13 +498,32 @@ class MainWindow(QtWidgets.QDialog):
 
         return pivotCtrl, targetCtrl;
 
+    def checkKeyframeRange(self, target):
+        startF = cmds.findKeyframe(target, which="first");
+        endF = cmds.findKeyframe(target, which="last");
+
+        return int(startF), int(endF);
+
     def createCtrlCurve(self, targetName, shapeNum):
-        if shapeNum == 0:
+        """カーブオプション引数から、指定のシェイプを持ったコントローラカーブを作成する
+
+        カーブオプション引数から、指定のシェイプを持ったコントローラカーブを作成する
+        1031時点。十字、球形、八面体。
+
+
+        Args:
+            pivotCtrl: (string): このツールにより生成されるピボットコントローラ名文字列。
+            targetCtrl: (string): pivotCtrl下で操作したいターゲットとなるコントローラ名文字列。
+        Returns:
+            ctrlCurve: (string): この関数により作成したコントローラカーブ名文字列。
+        """
+
+        if shapeNum == SHAPE_ENUM_CROSS:
             ctrlCurve = cmds.curve(name="{}{}".format(targetName, PIVOT_CTRL_SUFFIX),d=1,
             p=[(-1.0, 0.0, 0.0), (1.0, 0.0, 0.0),(0.0, 0.0, 0.0),(0.0, 0.0, 1.0),(0.0, 0.0, -1.0),(0.0, 0.0, 0.0),(0.0, 1.0, 0.0), (0.0, -1.0, 0.0)],
             k=[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
 
-        elif shapeNum == 1:
+        elif shapeNum == SHAPE_ENUM_SPHERE:
             ctrlCurve = cmds.curve(name="{}{}".format(targetName, PIVOT_CTRL_SUFFIX), d=1,
             p=[(0.0, 1.0, 0.0), (0.0, 0.92388, 0.382683), (0.0, 0.707107, 0.707107), (0.0, 0.382683, 0.92388), (0.0, 0.0, 1.0),
                 (0.0, -0.382683, 0.92388), (0.0, -0.707107, 0.707107), (0.0, -0.92388, 0.382683), (0.0, -1.0, 0.0), (0.0, -0.92388, -0.382683),
@@ -441,7 +540,7 @@ class MainWindow(QtWidgets.QDialog):
                 23.0, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 34.0, 35.0, 36.0, 37.0, 38.0, 39.0, 40.0, 41.0, 42.0, 43.0,
                 44.0, 45.0, 46.0, 47.0, 48.0, 49.0, 50.0, 51.0, 52.0])
         
-        elif shapeNum == 2:
+        elif shapeNum == SHAPE_ENUM_OCTAHEDRON:
            ctrlCurve = cmds.curve(name="{}{}".format(targetName, PIVOT_CTRL_SUFFIX),d=1,
             p=[(0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (-1.0, 0.0, 0.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), 
                 (0.0, -1.0, 0.0), (0.0, 0.0, -1.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (-1.0, 0.0, 0.0), (0.0, -1.0, 0.0), (1.0, 0.0, 0.0)],
@@ -451,5 +550,15 @@ class MainWindow(QtWidgets.QDialog):
 
 # show ui
 def showUi():
+    """本ツールのメインウィンドウを表示する関数
+
+    本ツールのメインウィンドウを表示する関数
+
+    Args:
+        None
+    Returns:
+        None
+
+    """
     mainUi = MainWindow();
     mainUi.show();

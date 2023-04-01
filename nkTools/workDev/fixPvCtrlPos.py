@@ -297,9 +297,14 @@ def fixPvCtrlPos():
             hipToPvCtrlVec = pvCtrlVec - hipJntVec;
             hipToPvCtrlVecLen = hipToPvCtrlVec.length();
 
-            # culc result = 内積位置 + 内積位置からひざジョイントへのベクトル(正規化、ノルム１) * ももジョイントからpvCtrlへのベクトル長
-            resultPvPoint = dotProdVec + (dotToKneeVecNormalized * hipToPvCtrlVecLen);
-            # print("hip To Pv: {}".format(hipToPvCtrlVecLen), "dot to knee: {}".format((dotToKneeVecNormalized * hipToPvCtrlVecLen).length()));
+            # check whether this vector is opposite
+            sideAdjust = 1;
+            kneeRotZ = cmds.getAttr("{}.rz".format(kneeJnt));
+            if kneeRotZ > 0:
+                sideAdjust = -1;
+
+            # culc result = 内積位置 + 内積位置からひざジョイントへのベクトル(正規化、ノルム１) * ももジョイントからpvCtrlへのベクトル長 * 配置する側を調整するための値
+            resultPvPoint = dotProdVec + (dotToKneeVecNormalized * hipToPvCtrlVecLen) * sideAdjust;
 
             # move target ctrl and set keyframe
             cmds.xform(pvCtrl, t=resultPvPoint, ws=True);
