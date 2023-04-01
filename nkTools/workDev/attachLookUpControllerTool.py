@@ -23,7 +23,7 @@ import attachLookUpControllerTool as attachLookUpControllerTool;
 reload(attachLookUpControllerTool);
 attachLookUpControllerTool.showUi();
 
-last updated: 2023/02/06
+last updated: 2023/02/13
 
 """
 
@@ -295,10 +295,24 @@ def attach():
 
     global mainUi;
 
-    targetCtrl = cmds.ls(sl=True)[0];
-    if cmds.objectType == "transform":
-        om.MGlobal.displayError("Please Select Controller");
+    targetCtrl = cmds.ls(sl=True);
+
+    if targetCtrl is None or len(targetCtrl) == 0 or len(targetCtrl) > 1:
+        om.MGlobal.displayError("Please Select one object");
         return;
+    else:
+        targetCtrl = targetCtrl[0];
+
+    if not cmds.objectType(targetCtrl) == "transform":
+        om.MGlobal.displayError("Please Select transform object");
+        return;
+
+    # check and delete
+    isApllied = cmds.attributeQuery("lookUp_controller_applied", node=targetCtrl, exists=True);
+    if isApllied:
+        # 既にアタッチされている場合は一度すべて削除を行ったうえで再作成を行う
+        om.MGlobal.displayInfo("Change Axis");
+        delete(attachOption=True);
 
     # get settings
     distance = mainUi.distance;
@@ -328,30 +342,18 @@ def attach():
     # create ctrl
     parentProxy = cmds.createNode("transform", n="parentProxy");
 
-    # check
     aimCtrlOffsetName = "{}_aim_offset".format(targetCtrl);
     upCtrlOffsetName = "{}_up_offset".format(targetCtrl);
     aimCtrlOffset = cmds.ls(aimCtrlOffsetName);
-    if (not aimCtrlOffset is None) and len(aimCtrlOffset) > 0:
-        aimCtrlOffset = aimCtrlOffset[0];
-        aimCtrl = cmds.listRelatives(aimCtrlOffset, c=True)[0];
-    else:
-        aimCtrlOffset = cmds.createNode("transform", n="{}_aim_offset".format(targetCtrl));
-        aimCtrl = cmds.spaceLocator(n="{}_aim_ctrl".format(targetCtrl))[0];
-        cmds.parent(aimCtrl, aimCtrlOffset);
+
+    aimCtrlOffset = cmds.createNode("transform", n="{}_aim_offset".format(targetCtrl));
+    aimCtrl = cmds.spaceLocator(n="{}_aim_ctrl".format(targetCtrl))[0];
+    cmds.parent(aimCtrl, aimCtrlOffset);
 
     upCtrlOffset = cmds.ls(upCtrlOffsetName);
-    if (not upCtrlOffset is None) and len(upCtrlOffset) > 0:
-        upCtrlOffset = upCtrlOffset[0];
-        upCtrl = cmds.listRelatives(upCtrlOffset, c=True)[0];
-    else:
-        upCtrlOffset = cmds.createNode("transform", n="{}_up_offset".format(targetCtrl))
-        upCtrl = cmds.spaceLocator(n="{}_up_ctrl".format(targetCtrl))[0];
-        cmds.parent(upCtrl, upCtrlOffset);
-
-    aimConst = cmds.listConnections(targetCtrl, source=True, type="aimConstraint");
-    if (not aimConst is None) and (aimConst > 0):
-        cmds.delete(aimConst);
+    upCtrlOffset = cmds.createNode("transform", n="{}_up_offset".format(targetCtrl))
+    upCtrl = cmds.spaceLocator(n="{}_up_ctrl".format(targetCtrl))[0];
+    cmds.parent(upCtrl, upCtrlOffset);
 
     # translation
     cmds.matchTransform(parentProxy, targetCtrl, pos=True, rot=True);
@@ -384,11 +386,14 @@ def attach():
     for i, ctrl in enumerate([aimCtrl, upCtrl]):
         setAnnotation(targetCtrl, ctrl, AIM_UP[i]);
 
+    # for check add attribute
+    cmds.addAttr(targetCtrl, longName="lookUp_controller_applied", dt='string');
+
     cmds.select(cl=True);
 
     cmds.undoInfo(closeChunk=True);
 
-def delete():
+def delete(attachOption=False):
     """aimコントローラ削除関数
     
     aimコントローラを削除する処理
@@ -399,13 +404,44 @@ def delete():
         None
     """
     cmds.undoInfo(openChunk=True);
-    print("test")
 
-    targetCtrl = cmds.ls(sl=True)[0];
-    if cmds.objectType == "transform":
+    selected = cmds.ls(sl=True);
+
+    if selected is None or len(selected) == 0 or len(selected) > 1:
+        om.MGlobal.displayError("Please Select one bject");
+        return;
+    else:
+        selected = selected[0];
+
+    if not cmds.objectType(selected) == "transform":
         om.MGlobal.displayError("Please Select Controller");
         return;
 
+    targetCtrl = "";
+    if not attachOption:
+        shape = cmds.listRelatives(selected, s=True)[0];
+        if cmds.objectType(shape) == "nurbsCurve":
+            isApllied = cmds.attributeQuery("lookUp_controller_applied", node=selected, exists=True);
+            if not isApllied:
+                om.MGlobal.displayError("Error! Plase select applied controller");
+                return;
+            else:
+                targetCtrl = selected;
+        elif cmds.objectType(shape) == "locator" and "_ctrl" in selected:
+            if "aim" in selected:
+                targetCtrl = selected.split("_aim_ctrl")[0];
+            elif "up" in selected:
+                targetCtrl = selected.split("_up_ctrl")[0];
+            else:
+                om.MGlobal.displayError("Error! Plase select aim or up controller");
+                return;
+        else:
+            om.MGlobal.displayError("Error! Plase select suitable object");
+            return;
+    else:
+        # アタッチの際に削除を行いたい場合は、上記のチェック処理をスキップしたいための対応
+        targetCtrl = selected;
+    
     aimConst = cmds.listConnections(targetCtrl, source=True, type="aimConstraint")[0];
     if aimConst is None or len(aimConst) == 0:
         om.MGlobal.displayError("AimConstraint not Connected");
@@ -417,7 +453,12 @@ def delete():
     aimCtrlOffset = cmds.listRelatives(aimCtrl[0], p=True);
     upCtrlOffset = cmds.listRelatives(upCtrl[0], p=True);
 
+    # 回転状態の維持
+    afterRot = cmds.getAttr("{}.rotate".format(targetCtrl))[0];
+
     cmds.delete(aimCtrlOffset, upCtrlOffset);
+
+    cmds.setAttr("{}.rotate".format(targetCtrl), afterRot[0], afterRot[1], afterRot[2],type="double3");
 
     toolGrp = cmds.ls(TOOL_GRP_NAME);
     if not (toolGrp is None) and (not len(toolGrp) == 0):
@@ -428,6 +469,9 @@ def delete():
     # delete annotations
     for aimUp in AIM_UP:
         cmds.delete("{}_{}_annotation_loc".format(targetCtrl, aimUp));
+
+    # delete attr for check
+    cmds.deleteAttr(targetCtrl, at="lookUp_controller_applied");
 
     cmds.undoInfo(closeChunk=True);
 

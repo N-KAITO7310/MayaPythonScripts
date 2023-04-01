@@ -63,7 +63,7 @@ SCRIPTNODENAME = "motionTrailLightScriptNode"
 TRANSLATION_ATTRS = ["tx", "ty", "tz"];
 ROTATE_ATTRS = ["rx", "ry", "rz"];
 SCALE_ATTRS = ["sx", "sy", "sz"];
-COLOR_RED_INDEX = 13;
+COLOR_RED_INDEX = 13;4
 CURVE_OPTION_NAME = "DisplayOption";
 CURVE_DISPLAY_ENUM = ["Normal", "Template", "Reference"];
 class CreateOption():
@@ -1006,7 +1006,8 @@ class MainWindow(QtWidgets.QDialog):
                     locConst = cmds.parentConstraint(each, locName, mo=False);
 
                     # bake and delete constraint
-                    cmds.bakeSimulation(locName, t=(start, end), at=TRANSLATION_ATTRS, simulation=False);
+                    # cmds.bakeSimulation(locName, t=(start, end), at=TRANSLATION_ATTRS + ROTATE_ATTRS, simulation=False);
+                    cmds.bakeResults(locName, t=(start, end), at=TRANSLATION_ATTRS + ROTATE_ATTRS, simulation=False);
                     cmds.delete(locConst);
 
                     # 0824 FBによりoverride設定を削除

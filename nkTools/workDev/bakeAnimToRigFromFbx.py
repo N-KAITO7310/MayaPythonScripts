@@ -14,7 +14,7 @@
     reload(bake);
     bake.showUi();
 
-    lastUpdated: 2022/10/31
+    lastUpdated: 2022/12/09
 """
 # ------------------------------------------------------------------------------
 from __future__ import absolute_import, division, generators, print_function, unicode_literals
@@ -361,7 +361,7 @@ class MainWindow(QtWidgets.QDialog):
             # インポートされたノードを削除
             cmds.delete(imported);
 
-            # oldFilePath ,newFilePath = self.saveAs(filePath, newFileName);
+            # フルパスからファイル名の取得、保存処理
             fileName = self.getFileName(filePath);
             self.save(saveDirectory, fileName);
 
@@ -369,7 +369,7 @@ class MainWindow(QtWidgets.QDialog):
             self.updateProgressDialog(progress, progressValue);
 
             # 再度ファイルを開き直し処理を継続する
-            cmds.file(currentPath, open=True, force=True);
+            cmds.file(currentPath, open=True, force=True, prompt=False);
 
         self.showConfirmWindow();
 
@@ -452,15 +452,6 @@ class MainWindow(QtWidgets.QDialog):
             om.MGlobal.displayError("Error save file");
 
         return True;
-
-    # def saveAs(self, filePath, newFileName):
-    #     oldFilePath = cmds.file(q=True, exn=True)
-    #     newFilePath = "/".join(filePath.split("/")[:-1]) + "/" + newFileName;
-
-    #     cmds.file(rename=newFilePath);
-    #     cmds.file(save=True, type='mayaBinary', force=True);
-
-    #     return oldFilePath, newFilePath;
         
     def extractJnts(self, objs):
         """オブジェクトリストからjointのみを抽出する関数
@@ -520,9 +511,11 @@ class MainWindow(QtWidgets.QDialog):
         
         mainJnts = [];
         for importedJnt in importedJnts:
+            # nameSpaceを除いた対象ジョイント
             jntName = importedJnt.split(NAMESPACE_SEPARATOR)[-1];
 
-            # リグファイルのネームスペースが一定でない可能性があるため、全てのネームスペースから一致するジョイントを取得
+            # 適用先リグファイルのジョイントを取得する。
+            # ネームスペースが一定でない可能性があるため、全てのネームスペースから一致するジョイントを取得後、インポートしたものでないほうを取得する
             searched = cmds.ls("::{}".format(jntName), type="joint");
 
             if (not searched is None) and len(searched) > 0:
@@ -531,8 +524,9 @@ class MainWindow(QtWidgets.QDialog):
                     mainJnt = [x for x in searched if not SPECIFIC_NAMESPACE in x][0];
                     mainJnts.append(mainJnt);
                 else:
-                    mainJnt = mainJnt[0];
-                    mainJnts.append(mainJnt);
+                    # インポートしたジョイントとリグジョイント名称が一致しており、同名のジョイントが二つ存在することを前提とする。
+                    # 片方にしか存在しないジョイントの場合はスキップ対象。
+                    continue;
             
         for mainJnt in mainJnts:
             doSearch = True;

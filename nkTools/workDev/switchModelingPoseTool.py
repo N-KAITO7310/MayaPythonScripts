@@ -54,7 +54,7 @@ last updated: 2023/02/20
 
 """
 # constant var
-WINDOW_TITLE = "switchModelingPoseTool";
+WINDOW_TITLE = "SwitchModelingPoseTool";
 WORLD_EXIST = "world";
 POSE_OPTION = ["modeling", "tPose"];
 CONFIRM_WINDOW_OPTION = ["Overwrite", "Delete"];
@@ -205,16 +205,25 @@ class MainWindow(QtWidgets.QDialog):
 # ------------------------------
 # main methods
 def aPoseSet():
-    """
+    """Aposeにおける各ジョイントのMatrix情報を選択ルートジョイントに格納するメソッド
+
+    Aposeにおける各ジョイントのMatrix情報を選択ルートジョイントに格納する。
+
+    処理フロー
+    ・選択チェック
+    ・既存情報チェック(上書きの場合一部の処理をのぞいた削除メソッドを実行)
+    ・階層の差分チェック
+    ・Matrix情報の取得
+    ・各ジョイントの親ノード名の取得
+    ・選択ルートジョイントへの情報格納(compound→matrix, str)
     
-    ・選択オブジェクトから全ての子ジョイントを取得
-    ・(前回情報格納時との階層差分をチェックする処理が必要)
-    ・全てのジョイントからworldMatrix, localMatrix, parentJntを取得し、リスト化
-    ・リストから、親ジョイントにmatrixを順に格納(命名により取得できるように)
-    ・カンマ区切りで文字列を形成
-    ・String型で、親ノード名を格納
-    
+    Args:
+        None
+    Returns:
+        None
+
     """
+
     cmds.undoInfo(openChunk=True);
 
     # TODO: check処理を含めたセットの前段階処理も全て一つのメソッドでまとめて共通化する？
@@ -232,7 +241,7 @@ def aPoseSet():
 
         # 上書きする場合は、全て削除する
         if response:
-            aPoseDelete(only=False);
+            aPoseDelete(useOverwrite=True);
         else:
             om.MGlobal.displayInfo("processing interrupted");
             return;
@@ -254,10 +263,22 @@ def aPoseSet():
     cmds.undoInfo(closeChunk=True);
 
 def aPoseApply():
-    """
+    """AposeのMatrix情報をセットするメソッド
+
+    Aposeにおける各ジョイントのMatrix情報を選択ルートジョイントから取得し、ルート以下のジョイント全てにセットを行う
+
+    処理フロー
+    ・選択チェック
+    ・既存情報チェック(上書きの場合一部の処理をのぞいた削除メソッドを実行)
+    ・階層の差分チェック
+    ・ルートジョイントからセットされているMatrix情報、各階層化ジョイントの親ノード名の取得
+    ・各ジョイントへMatrixをセット
     
-    ・親ジョイントから順にworldMatrixをセットする
-    
+    Args:
+        None
+    Returns:
+        None
+
     """
     cmds.undoInfo(openChunk=True);
 
@@ -285,12 +306,28 @@ def aPoseApply():
 
     cmds.undoInfo(closeChunk=True);
 
-def aPoseDelete(only=True):
+def aPoseDelete(useOverwrite):
+    """AposeのMatrix情報を削除するメソッド
+
+    Aposeにおける各ジョイントのMatrix情報、親情報を削除する
+    
+    処理フロー
+    ・選択チェック
+    ・既存情報チェック(既に情報が存在する場合は上書き確認ウィンドウの表示)
+    ・格納情報の削除
+    
+    Args:
+        useOverwrite: (bool): pysideのslotによって呼び出される場合基本引数はFalseとなる。上書きの際の削除の際にTrueを指定することで不要な確認処理を回避する。
+    Returns:
+        None
+
+    """
+
     cmds.undoInfo(openChunk=True);
     
     selectedJnt = checkSelected();
 
-    if only:
+    if not useOverwrite:
         # check information exists
         checkExistInformationsResult = checkExistInformations(selectedJnt, POSE_OPTION[0]);
         if checkExistInformationsResult:
@@ -298,6 +335,9 @@ def aPoseDelete(only=True):
             if not response:
                 om.MGlobal.displayInfo("processing interrupted");
                 return;
+        else:
+            om.MGlobal.displayError("Do not exist informations");
+            return;
 
     deleteAttrs(selectedJnt, poseOption=POSE_OPTION[0]);
 
@@ -306,6 +346,25 @@ def aPoseDelete(only=True):
     cmds.undoInfo(closeChunk=True);
 
 def tPoseSet():
+    """Tposeにおける各ジョイントのMatrix情報を選択ルートジョイントに格納するメソッド
+
+    Tposeにおける各ジョイントのMatrix情報を選択ルートジョイントに格納する。
+
+    処理フロー
+    ・選択チェック
+    ・既存情報チェック(上書きの場合一部の処理をのぞいた削除メソッドを実行)
+    ・階層の差分チェック
+    ・Matrix情報の取得
+    ・各ジョイントの親ノード名の取得
+    ・選択ルートジョイントへの情報格納(compound→matrix, str)
+    
+    Args:
+        None
+    Returns:
+        None
+
+    """
+
     cmds.undoInfo(openChunk=True);
     
     selectedJnt = checkSelected();
@@ -322,7 +381,7 @@ def tPoseSet():
 
         # 上書きする場合は、全て削除する
         if response:
-            tPoseDelete(only=False);
+            tPoseDelete(useOverwrite=True);
         else:
             om.MGlobal.displayInfo("processing interrupted");
             return;
@@ -344,6 +403,23 @@ def tPoseSet():
     cmds.undoInfo(closeChunk=True);
 
 def tPoseApply():
+    """TposeのMatrix情報をセットするメソッド
+
+    Tposeにおける各ジョイントのMatrix情報を選択ルートジョイントから取得し、ルート以下のジョイント全てにセットを行う
+
+    処理フロー
+    ・選択チェック
+    ・既存情報チェック(上書きの場合一部の処理をのぞいた削除メソッドを実行)
+    ・階層の差分チェック
+    ・ルートジョイントからセットされているMatrix情報、各階層化ジョイントの親ノード名の取得
+    ・各ジョイントへMatrixをセット
+    
+    Args:
+        None
+    Returns:
+        None
+
+    """
     cmds.undoInfo(openChunk=True);
 
     selectedJnt = checkSelected();
@@ -370,19 +446,38 @@ def tPoseApply():
 
     cmds.undoInfo(closeChunk=True);
 
-def tPoseDelete(only=True):
+def tPoseDelete(useOverwrite):
+    """TposeのMatrix情報を削除するメソッド
+
+    Tposeにおける各ジョイントのMatrix情報、親情報を削除する
+    
+    処理フロー
+    ・選択チェック
+    ・既存情報チェック(既に情報が存在する場合は上書き確認ウィンドウの表示)
+    ・格納情報の削除
+    
+    Args:
+        useOverwrite: (bool): pysideのslotによって呼び出される場合基本引数はFalseとなる。上書きの際の削除の際にTrueを指定することで不要な確認処理を回避する。
+    Returns:
+        None
+
+    """
     cmds.undoInfo(openChunk=True);
 
     selectedJnt = checkSelected();
 
-    if only:
+    if not useOverwrite:
         # check information exists
         checkExistInformationsResult = checkExistInformations(selectedJnt, POSE_OPTION[1]);
         if checkExistInformationsResult:
             response = showConfirmWindow(CONFIRM_WINDOW_OPTION[1]);
             if not response:
                 om.MGlobal.displayInfo("processing interrupted");
-                return True;
+                return;
+        else:
+            om.MGlobal.displayError("Do not exist informations");
+            return;
+
 
     deleteAttrs(selectedJnt, poseOption=POSE_OPTION[1]);
 
@@ -393,6 +488,17 @@ def tPoseDelete(only=True):
 # ------------------------------
 # helper mothods
 def getHierarchyDescendingOrder(targetJnt): 
+    """選択されたルートジョイントから下の階層に向かってジョイントをリスト化し返すメソッド
+
+    選択されたルートジョイントから下の階層に向かってジョイントをリスト化し返す
+    
+    Args:
+        targetJnt: (string): ルートとなるターゲットジョイント
+    Returns:
+        list: ([string]): 階層降順リスト
+
+    """
+
     list = [];
     selList = om.MSelectionList();
     selList.add(targetJnt);
@@ -414,6 +520,18 @@ def getHierarchyDescendingOrder(targetJnt):
     return list;
 
 def checkSelected():
+    """選択されたオブジェクトがこのツールの用途において適切かどうかを判定するメソッド
+
+    選択されたオブジェクトがこのツールの用途において適切かどうかを判定する
+    ・選択数
+    ・ジョイントであるか
+    
+    Args:
+        None
+    Returns:
+        selectedJnt: (string): 選択された一つのジョイント
+
+    """
     selected = cmds.ls(sl=True);
     selectedJnt = None;
     if (selected is None) or (len(selected) != 1):
@@ -428,11 +546,33 @@ def checkSelected():
     return selectedJnt;
 
 def checkExistInformations(targetJnt, poseOption):
+    """選択されたルートジョイントに既にMatrix情報がセットされているかどうかを判定するメソッド
+
+    選択されたルートジョイントに既にMatrix情報がセットされているかどうかを判定する
+    
+    Args:
+        targetJnt: (string): ターゲットとなるルートジョイント
+        poseOption: (str): アトリビュート名で利用しているT or Aスタンス情報を示す文字列
+    Returns:
+        attrExist: (bool): アトリビュートの有無
+
+    """
     # 対象となるジョイントに既に情報があるかを判定する。T or Aの2パターン。再利用・拡張のためメソッド化。
     attrExist = cmds.attributeQuery("{}_world_matrixs".format(poseOption), node=targetJnt, exists=True);
     return attrExist;
 
 def checkHierarchyDiff(allJnts, poseOption):
+    """前回セット時とのジョイント階層差分があるかどうかを判定するメソッド
+
+    前回セット時とのジョイント階層差分があるかどうかを判定する
+    
+    Args:
+        allJnts: (string): 対象となる全てのジョイント
+        poseOption: (str): アトリビュート名で利用しているT or Aスタンス情報を示す文字列
+    Returns:
+        (bool): 差分の有無
+
+    """
     # check attr exist
     attrExist = cmds.attributeQuery("{}_parent_obj_info".format(poseOption), node=allJnts[0], exists=True);
     if attrExist:
@@ -460,8 +600,15 @@ def checkHierarchyDiff(allJnts, poseOption):
     return True;
 
 def returnMatrixAndParentLists(allJnts):
-    """
-    全てのジョイントのworld, local Matrixを返す
+    """対象となるジョイントからMatrix情報、親ノード情報を取得しリストで返すメソッド
+
+    対象となるジョイントからMatrix情報、親ノード情報を取得しリストで返す
+    
+    Args:
+        allJnts: ([string]): ターゲットとなる全てのジョイント
+    Returns:
+        jntInfoLists: ([[worldMatrix], [localMatrix], string]]): worldMatrix, localMatrix, 親オブジェクト名文字列を含むリスト
+
     """
     jntInfoLists = [];
     for jnt in allJnts:
@@ -478,6 +625,19 @@ def returnMatrixAndParentLists(allJnts):
     return jntInfoLists;
 
 def setJntInformations(targetJnt, jntInfoLists, poseOption):
+    """格納された情報から、対象となる各ジョイントにMatrix情報をセットするメソッド
+
+    格納された情報から、対象となる各ジョイントにMatrix情報をセットする
+    
+    Args:
+        targetJnt: (string): ターゲットとなるルートジョイント
+        jntInfoLists: ([[worldMatrix], [localMatrix], string]]): worldMatrix, localMatrix, 親オブジェクト名文字列を含むリスト
+        poseOption: (string): アトリビュート名で利用しているT or Aスタンス情報を示す文字列
+    Returns:
+        None
+
+    """
+
     numOfList = len(jntInfoLists);
     parentObjList = [];
 
@@ -514,6 +674,17 @@ def setJntInformations(targetJnt, jntInfoLists, poseOption):
     cmds.setAttr("{}.{}_parent_obj_info".format(targetJnt, poseOption), parentObjStr, type="string");
 
 def getJntInformations(allJnts, poseOption):
+    """ルートジョイントから、格納された情報を取得する
+
+    対象となるジョイントからMatrix情報、親ノード情報を取得しリストで返す
+    
+    Args:
+        allJnts: ([string]): ターゲットとなる全てのジョイント
+        poseOption: (string): アトリビュート名で利用しているT or Aスタンス情報を示す文字列
+    Returns:
+        jntInfoLists: ([[worldMatrix], [localMatrix], string]]): worldMatrix, localMatrix, 親オブジェクト名文字列を含むリスト
+
+    """
     jntInfoLists = [];
     targetJnt = allJnts[0];
 
@@ -529,8 +700,16 @@ def getJntInformations(allJnts, poseOption):
     return jntInfoLists;
 
 def applyJntInformations(jntInfoLists):
-    """
-    取得した情報から、各ジョイントに対しworldMatrixをセットする。
+    """取得されたMatrix情報を用いて、対象となるジョイント群に値をセットするメソッド
+
+    取得されたMatrix情報を用いて、対象となるジョイント群に値をセットする
+    現状の実装ではlocalMatrixの値を用いている。worldMatrixの使用については下記コード内コメント参照ください
+    
+    Args:
+        jntInfoLists: ([[worldMatrix], [localMatrix], string]]): worldMatrix, localMatrix, 親オブジェクト名文字列を含むリスト
+    Returns:
+        None
+
     """
     for info in jntInfoLists:
         worldMat, localMat, jnt = info;
@@ -540,6 +719,20 @@ def applyJntInformations(jntInfoLists):
         cmds.xform(jnt, matrix=localMat, ws=False);
 
 def deleteAttrs(targetJnt, poseOption):
+    """ルートジョイントにセットされたアトリビュート情報を削除するメソッド
+
+    ルートジョイントにセットされたアトリビュート情報を削除する。
+    compound型に親子付けされているため、compound型アトリビュート、文字列アトリビュートのみ削除する
+
+    Args:
+        targetJnt: string: ルートジョイント名
+        poseOption: (string): アトリビュート名で利用しているT or Aスタンス情報を示す文字列
+
+    Returns:
+        (bool): 処理が正常に行われたかどうか
+
+    """
+
     attrExist = cmds.attributeQuery("{}_world_matrixs".format(poseOption), node=targetJnt, exists=True);
     if not attrExist:
         om.MGlobal.displayError("do not exist attributes");
@@ -556,15 +749,23 @@ def deleteAttrs(targetJnt, poseOption):
 
 # confirm window
 def showConfirmWindow(confirmOption):
+    """確認ウィンドウを表示するメソッド
+
+    確認ウィンドウを表示する。引数により削除or上書き表示を切り替える。
+
+    Args:
+        confirmOption: string: オプションを表す文字列
+
+    Returns:
+        (bool): ユーザーからのレスポンスからboolを返す
+        
+    """
     response = cmds.confirmDialog( title=confirmOption, message='Are you sure you want to {}?'.format(confirmOption), button=['Yes','No'], defaultButton='Yes', cancelButton='No', dismissString='No' )
     
     if response == "Yes":
         return True;
     else:
         return False;
-
-def showDeleteConfirmWindow():
-    pass;
 
 # show ui
 def showUi():
