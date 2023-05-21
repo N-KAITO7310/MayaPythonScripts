@@ -58,12 +58,12 @@ CURVE_SUFFIX = "motionTrail_curve";
 HELP_DOCUMENT_DIR_NAME = "\\helpDoc\\";
 HELP_DOCUMENT_FILE_NAME = "motionTrailLight_helpDocument.txt";
 LOC_SUFFIX = "motionTrail_loc";
-CURVE_GROUP = "motionTrailLight_grp"
-SCRIPTNODENAME = "motionTrailLightScriptNode"
+CURVE_GROUP = "motionTrailLight_grp";
+SCRIPTNODENAME = "motionTrailLightScriptNode";
 TRANSLATION_ATTRS = ["tx", "ty", "tz"];
 ROTATE_ATTRS = ["rx", "ry", "rz"];
 SCALE_ATTRS = ["sx", "sy", "sz"];
-COLOR_RED_INDEX = 13;4
+COLOR_RED_INDEX = 13;
 CURVE_OPTION_NAME = "DisplayOption";
 CURVE_DISPLAY_ENUM = ["Normal", "Template", "Reference"];
 class CreateOption():
