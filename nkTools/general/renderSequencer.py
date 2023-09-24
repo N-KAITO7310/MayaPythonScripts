@@ -1,8 +1,22 @@
 # -*- coding: utf-8 -*-
 """
     RenderSequencer
+    description: Use to render continuously
 
-    lastUpdated: 2022/12/30
+    created: 2022/12/30
+    lastupdated: 2022/12/30
+
+    -python3-
+    from nkTools.general import renderSequencer;
+    import importlib
+    importlib.reload(renderSequencer);
+    renderSequencer.showUi();
+
+    -python2-
+    from nkTools.general import renderSequencer;
+    reload(renderSequencer);
+    renderSequencer.showUi();
+
 """
 
 from __future__ import absolute_import, division, generators, print_function, unicode_literals
@@ -238,6 +252,9 @@ class MainWindow(QtWidgets.QDialog):
         ・完了ダイアログの表示
         """
         paths = self.getFiles();
+        if not paths:
+            return;
+
         fileCount = len(paths);
         progressDialog = self.showProgressDialog();
         
@@ -294,6 +311,7 @@ class MainWindow(QtWidgets.QDialog):
             paths = cmds.fileDialog2(fileFilter=FILE_FILTER, fileMode=4, dialogStyle=2, caption="Select import fbx files");
         except:
             om.MGlobal.displayError("Error File Dialog");
+            return None;
             
         return paths;
 

@@ -12,10 +12,11 @@ autoFKIKSetUpTool.option();
 
 """
 
-from maya import OpenMaya, cmds, mel;
+from maya import cmds, mel;
 from PySide2 import QtCore, QtWidgets, QtGui
 from ..lib import qt;
 import pymel.core as pm;
+import maya.api.OpenMaya as om;
 
 def autoFKIKSetUpTool():
     # ------------------------------
@@ -38,9 +39,9 @@ def autoFKIKSetUpTool():
     bodyPrefix = "";
     if rigType == 0:
         if isLower:
-            bodyPrefix = "arm_";
-        else:
             bodyPrefix = "leg_";
+        else:
+            bodyPrefix = "arm_";
     if rigType == 1:
         bodyPrefix = "leg_";
 
@@ -57,6 +58,7 @@ def autoFKIKSetUpTool():
     if not "l_" in whichSide:
         if not "r_" in whichSide:
             cmds.error("Please use a joint with a usable prefix of eigher l_ or r_");
+            return;
             
     # set prefix
     prefix = whichSide + bodyPrefix + bodySidePrefix
@@ -71,7 +73,13 @@ def autoFKIKSetUpTool():
     jointHierarchy = cmds.listRelatives(jointRoot, ad=True, type="joint");
     jointHierarchy.append(jointRoot);
     jointHierarchy.reverse();
-
+    
+    
+    # Bifurcation setup type
+    if rigType == 0:
+        setupBiped(whichSide, prefix, jointHierarchy[0], jointHierarchy);
+        return;
+    
     # create new joint ilst
     fkSuffix = "_fk_jnt";
     ikSuffix = "_ik_jnt";
@@ -116,7 +124,7 @@ def autoFKIKSetUpTool():
     # rootCtrl
     rootCtrl = createCurveAndOffset(0, rootControlName, jointRoot, 10)[1];
 
-    # FKIKSwitch
+    # FKIKSwitch TODO:メソッドに置き換えること
     fkikSwitchCtrlOffset = createCurveAndOffset(5, prefix + "_fkikSwitch_ctrl", jointHierarchy[2], 10)
     cmds.move(10*sideInverse, 0, 0, fkikSwitchCtrlOffset[0], r=True, wd=True);
     cmds.addAttr(fkikSwitchCtrlOffset[1], ln="FKIKSwitch", at="double", min=0, max=1 ,dv=1);
@@ -129,7 +137,7 @@ def autoFKIKSetUpTool():
     # fk controler
     fkCtrlList = [];
     for i in range(bodyJoints):
-        fkCtrlName = removeJntSuffix(jointHierarchy[i]) + "_fk_ctrl"
+        fkCtrlName = removeJntSuffix(jointHierarchy[i]) + "_fk_ctrl";
         ctrlAndOffset = createCurveAndOffset(0, fkCtrlName, jointHierarchy[i], 10);
         fkCtrlList.append(ctrlAndOffset);
     # fk hierarchy
@@ -461,12 +469,252 @@ def createFkHierarchy(fkAndOffsetList):
         cmds.parent(ctrlAndOffet[0], fkparent);
         fkparent = ctrlAndOffet[1];
 
+def createFKIKSwitchCtrl(side, prefix, posObj):
+    # FKIKSwitch
+    fkikSwitchCtrlOffset = createCurveAndOffset(5, prefix + "fkikSwitch_ctrl", posObj, 10);
+    cmds.setAttr("{}.rotate".format(fkikSwitchCtrlOffset[0]), 0, 0, 0, type="double3");
+    # cmds.move(10*side, 0, 0, fkikSwitchCtrlOffset[0], r=True, wd=True);
+    cmds.addAttr(fkikSwitchCtrlOffset[1], ln="FKIKSwitch", at="double", min=0, max=1 ,dv=1);
+    cmds.setAttr(fkikSwitchCtrlOffset[1] + ".FKIKSwitch", e=True, keyable=True);
+    cmds.addAttr(fkikSwitchCtrlOffset[1], ln="stretch", at="double", min=0.0, max=1, dv=1);
+    cmds.setAttr(fkikSwitchCtrlOffset[1] + ".stretch", e=True, keyable=True);
+    cmds.addAttr(fkikSwitchCtrlOffset[1], ln="VolumeOffset", at="double", min=-0.5, max=3 ,dv=0);
+    cmds.setAttr(fkikSwitchCtrlOffset[1] + ".VolumeOffset", e=True, keyable=True);
+    fkikReverse = cmds.shadingNode("reverse", au=True, n=prefix + "_fkik_reverse");
+    cmds.connectAttr(fkikSwitchCtrlOffset[1] + ".FKIKSwitch", fkikReverse + ".inputX", f=True);
+    fkikSwitchCtrlOffset.append(fkikReverse);
+
+    return fkikSwitchCtrlOffset;
+
+def connectMainJntToFKIK(switchCtrl, mainJnts):
+    # setup fkikSwitch
+    for i, mainJnt in enumerate(mainJnts):
+        fkJnt = mainJnt[:mainJnt.rfind("_jnt")] + "_fk_jnt";
+        ikJnt = mainJnt[:mainJnt.rfind("_jnt")] + "_ik_jnt";
+        transBC = cmds.shadingNode("blendColors", au=True, n=mainJnt + "_trans_BC");
+        rotBC = cmds.shadingNode("blendColors", au=True, n=mainJnt + "_rot_BC");
+        scaleBC = cmds.shadingNode("blendColors", au=True, n=mainJnt + "_scale_BC");
+        cmds.connectAttr(switchCtrl + ".FKIKSwitch", transBC + ".blender");
+        cmds.connectAttr(switchCtrl + ".FKIKSwitch", rotBC + ".blender");
+        cmds.connectAttr(switchCtrl + ".FKIKSwitch", scaleBC + ".blender");
+        xyz = ["X", "Y", "Z"];
+        rgb = ["R", "G", "B"];
+        for i, axis in enumerate(xyz):
+            cmds.connectAttr(fkJnt + ".translate" + axis, transBC + ".color2" + rgb[i]);
+            cmds.connectAttr(ikJnt + ".translate" + axis, transBC + ".color1" + rgb[i]);
+            cmds.connectAttr(transBC + ".output" + rgb[i], mainJnt + ".translate" + axis);
+        for i, axis in enumerate(xyz):
+            cmds.connectAttr(fkJnt + ".rotate" + axis, rotBC + ".color2" + rgb[i]);
+            cmds.connectAttr(ikJnt + ".rotate" + axis, rotBC + ".color1" + rgb[i]);
+            cmds.connectAttr(rotBC + ".output" + rgb[i], mainJnt + ".rotate" + axis);
+        for i, axis in enumerate(xyz):
+            cmds.connectAttr(fkJnt + ".scale" + axis, scaleBC + ".color2" + rgb[i]);
+            cmds.connectAttr(ikJnt + ".scale" + axis, scaleBC + ".color1" + rgb[i]);
+            cmds.connectAttr(scaleBC + ".output" + rgb[i], mainJnt + ".scale" + axis);
+
+# ---------- setup Biped Arm or Leg ----------
+def setupBiped(side, prefix, root, jointHierarchy):
+    axisList = ["X", "Y", "Z"];
+    armJointsNum = 3;
+    ctrlRootList = [];
+    
+    jointHierarchy = jointHierarchy[:armJointsNum];
+    fkikSwitchCtrlName = prefix + "fkikSwitch_ctrl";
+    
+    # print(side, prefix, root);
+    sideNum = 1;
+    if not side in "l_":
+        sideNum = -1;
+    fkikSwitchCtrlAndOffset = createFKIKSwitchCtrl(sideNum, prefix, root);
+    ctrlRootList.append(fkikSwitchCtrlAndOffset[0]);
+
+    newJointList = ["_fk_jnt", "_ik_jnt"];
+    fkJointList =[];
+    ikJointList = [];
+    # create joint per mainJoints
+    for i, newJoint in enumerate(newJointList):
+        for o in range(armJointsNum):
+            newJointName = removeJntSuffix(jointHierarchy[o]) + newJoint;
+            cmds.joint(n=newJointName);
+            cmds.matchTransform(newJointName, jointHierarchy[o]);
+            cmds.makeIdentity(newJointName, a=1, t=0, r=1, s=0);
+
+            if i == 0:
+                fkJointList.append(newJointName);
+            else:
+                ikJointList.append(newJointName);
+
+        cmds.select(cl=True);
+
+    # setup fk and ik jnt to main jnt
+    connectMainJntToFKIK(fkikSwitchCtrlName, jointHierarchy);
+
+    # set up FK
+    # fk controller
+    fkCtrlList = [];
+    for i in range(armJointsNum):
+        fkCtrlName = removeJntSuffix(jointHierarchy[i]) + "_fk_ctrl";
+        ctrlAndOffset = createCurveAndOffset(0, fkCtrlName, jointHierarchy[i], 10);
+        cmds.orientConstraint(ctrlAndOffset[1], fkJointList[i]);
+        fkCtrlList.append(ctrlAndOffset);
+    # fk hierarchy
+    createFkHierarchy(fkCtrlList);
+    ctrlRootList.append(fkCtrlList[0][0]);
+    
+    # set up IK
+    # prepare ctrl
+    ikCtrlName = prefix + "Ik_ctrl";
+    ikCtrlAndOffset = createCurveAndOffset(3, ikCtrlName, jointHierarchy[-1], 10);
+    ctrlRootList.append(ikCtrlAndOffset[0]);
+    
+    # createIkhandle
+    ikHandle = str(cmds.ikHandle(n=prefix + "ikHandle", solver="ikRPsolver", sj=ikJointList[0], ee=ikJointList[-1])[0]);
+    cmds.parent(ikHandle, ikCtrlName);
+    
+    # ---------- create pv ctrl
+    # setup pv
+    pvCtrlName = prefix + "Ik_pv_ctrl";
+    pvCtrlNameAndOffset = createCurveAndOffset(4, pvCtrlName, jointHierarchy[1], 10);
+    ctrlRootList.append(pvCtrlNameAndOffset[0]);
+
+    # adjustment pv position
+    ikShoulderJntVec = om.MVector(cmds.xform(ikJointList[0], q=1, ws=1, t=1));
+    ikElbowJntVec = om.MVector(cmds.xform(ikJointList[1], q=1, ws=1, t=1));
+    ikHandJntVec = om.MVector(cmds.xform(ikJointList[2], q=1, ws=1, t=1));
+
+    # vec length
+    shoulderToElbowLen = ikElbowJntVec - ikShoulderJntVec;
+    shoulderToHandLen = ikHandJntVec - ikShoulderJntVec;
+
+    # normalize
+    shoulderToHandLenNorm = shoulderToHandLen.normalize();
+    # dot product length
+    projLength = shoulderToElbowLen * shoulderToHandLenNorm;
+    # dot product vector
+    proj_vec = (shoulderToHandLenNorm * projLength) + ikShoulderJntVec;
+
+    # vector dot product point to elbow
+    projToElbowVec = ikElbowJntVec - proj_vec;
+    projToElbowVecNorm = projToElbowVec.normalize();
+
+    # result pole vector point
+    resultPvPoint = ikElbowJntVec + (projToElbowVecNorm * 5);
+
+    # place pvCtrl offset grp
+    cmds.xform(pvCtrlNameAndOffset[0], t=resultPvPoint);   
+    
+    # pv const
+    cmds.poleVectorConstraint(pvCtrlName, ikHandle);
+    
+    # follow attr
+    cmds.addAttr(pvCtrlName, longName="Follow", at="enum", enumName="None:IkCtrl", min=0, max=1, defaultValue=1);
+    cmds.setAttr(pvCtrlName + ".Follow", e=True, keyable=True);
+    pvParentConst = cmds.parentConstraint(ikCtrlName, pvCtrlNameAndOffset[0], mo=True)[0];
+    cmds.connectAttr("{}.Follow".format(pvCtrlName), "{}.{}W0".format(pvParentConst, ikCtrlName));
+
+    # ---------- pv ctrl created
+    
+    # ---------- make Stretchness
+    # create pos loc
+    shoulderLoc = cmds.spaceLocator(n="{}_loc".format(ikJointList[0]))[0];
+    ikCtrlLoc = cmds.spaceLocator(n="{}_loc".format(ikCtrlName))[0];
+    cmds.setAttr("{}.visibility".format(shoulderLoc), 0);
+    cmds.setAttr("{}.visibility".format(ikCtrlLoc), 0);
+    
+    # snap pos
+    cmds.pointConstraint(ikJointList[0], shoulderLoc, mo=False);
+    cmds.pointConstraint(ikCtrlName, ikCtrlLoc, mo=False);
+    
+    # get shape
+    shoulderLocShape = cmds.listRelatives(shoulderLoc, s=True)[0];
+    ikCtrlLocShape = cmds.listRelatives(ikCtrlLoc, s=True)[0];
+    
+    # create dist and connect
+    distShape = cmds.createNode("distanceDimShape", n="{}stretch_distShape".format(prefix));
+    distTrans = cmds.listRelatives(distShape, p=True)[0];
+    cmds.setAttr("{}.visibility".format(distTrans), 0);
+    cmds.connectAttr("{}.worldPosition[0]".format(shoulderLoc), "{}.startPoint".format(distShape));
+    cmds.connectAttr("{}.worldPosition[0]".format(ikCtrlLocShape), "{}.endPoint".format(distShape));
+    
+    # create stretch factor
+    stretchMd = cmds.createNode("multiplyDivide", n="{}stretchFactor_MD".format(prefix));
+    cmds.setAttr("{}.operation".format(stretchMd), 2);
+    cmds.connectAttr("{}.distance".format(distShape), "{}.input1X".format(stretchMd));
+    
+    # transform Scale
+    transformScaleMd = cmds.createNode("multiplyDivide", n="transform_{}scale_MD".format(prefix));
+    cmds.setAttr("{}.input1X".format(transformScaleMd), cmds.getAttr("{}.distance".format(distShape)));
+    transformCtrl = cmds.ls("transform_ctrl");
+    transformScalePMA = cmds.ls("transform_scale_PMA");
+    
+    if len(transformCtrl) > 0 and len(transformScalePMA) < 1:
+        # transform scale average pma
+        transformScalePMA = cmds.createNode("plusMinusAverage", n="transform_scale_PMA");
+        for i, axis in enumerate(axisList):
+            cmds.connectAttr("{}.scale{}".format(transformCtrl[0], axis), "{}.input1D[{}]".format(transformScalePMA, i));
+            
+        cmds.connectAttr("{}.output1D".format(transformScalePMA), "{}.input2X".format(transformScaleMd));
+    cmds.connectAttr("{}.outputX".format(transformScaleMd), "{}.input2X".format(stretchMd));
+    
+    # stretch Factor condition
+    stretchFactorCondition = cmds.createNode("condition", n="{}stretchFactor_condition");
+    cmds.setAttr("{}.secondTerm".format(stretchFactorCondition), cmds.getAttr("{}.distance".format(distShape)));
+    cmds.connectAttr("{}.distance".format(distShape), "{}.firstTerm".format(stretchFactorCondition));
+    cmds.setAttr("{}.operation".format(stretchFactorCondition), 2);
+    cmds.connectAttr("{}.outputX".format(stretchMd), "{}.colorIfTrueR".format(stretchFactorCondition));
+    
+    # stretch condition
+    stretchCondition = cmds.createNode("condition", n="{}stretch_condition".format(prefix));
+    cmds.setAttr("{}.secondTerm".format(stretchCondition), 1);
+    cmds.connectAttr("{}.stretch".format(fkikSwitchCtrlName), "{}.firstTerm".format(stretchCondition));
+    cmds.connectAttr("{}.outColorR".format(stretchFactorCondition), "{}.colorIfTrueR".format(stretchCondition));
+    
+    # volume offset
+    volumeMd = cmds.createNode("multiplyDivide", n="{}volume_MD".format(prefix));
+    cmds.setAttr("{}.operation".format(volumeMd), 3)
+    cmds.connectAttr("{}.outColorR".format(stretchCondition), "{}.input1X".format(volumeMd));
+    volumePma = cmds.createNode("plusMinusAverage", n="{}volume_PMA".format(prefix));
+    cmds.setAttr("{}.input1D[0]".format(volumePma), 0);
+    cmds.setAttr("{}.operation".format(volumePma), 2);
+    cmds.connectAttr("{}.VolumeOffset".format(fkikSwitchCtrlName), "{}.input1D[1]".format(volumePma));
+    cmds.connectAttr("{}.output1D".format(volumePma), "{}.input2X".format(volumeMd));
+    
+    # construct stretch connection each ik jnt
+    for ikJnt in ikJointList[1:]:
+        tempMd = cmds.createNode("multiplyDivide", n="{}_stretch_MD".format(ikJnt));
+        defaultTx = cmds.getAttr("{}.tx".format(ikJnt));
+        cmds.setAttr("{}.input1X".format(tempMd), defaultTx);
+        cmds.connectAttr("{}.outColorR".format(stretchCondition), "{}.input2X".format(tempMd));
+        cmds.connectAttr("{}.outputX".format(tempMd), "{}.translateX".format(ikJnt));
+        for axis in axisList[1:]:
+            cmds.connectAttr("{}.outputX".format(volumeMd), "{}.scale{}".format(ikJnt, axis));
+    
+    # ---------- adjustment
+    # visibility setup
+    cmds.setAttr(fkJointList[0] + ".visibility", 0);
+    cmds.setAttr(ikJointList[0] + ".visibility", 0);
+    cmds.setAttr(ikJointList[0] + ".visibility", 0);
+    # fk vis
+    cmds.connectAttr(fkikSwitchCtrlAndOffset[2] + ".outputX", str(cmds.listRelatives(fkCtrlList[0], p=True)[0]) + ".visibility");
+    # ik vis
+    cmds.connectAttr(fkikSwitchCtrlName + ".FKIKSwitch", ikCtrlAndOffset[0] + ".visibility");
+    cmds.connectAttr(fkikSwitchCtrlName + ".FKIKSwitch", pvCtrlNameAndOffset[0] + ".visibility");
+
+    # Organize
+    ctrlGrp = cmds.group(n="{}ctrl_grp".format(prefix), em=True);
+    cmds.parent(ctrlRootList, ctrlGrp);
+    
+    locGrp = cmds.ls("loc_grp");
+    if len(locGrp) == 0:
+        locGrp = cmds.group(n="loc_grp", em=True);
+    cmds.parent([shoulderLoc, ikCtrlLoc, distTrans], locGrp);
+
 # ------------------------------
 # UI
 # apply
 def main():
     autoFKIKSetUpTool();
-    OpenMaya.MGlobal.displayInfo("Done");
+    om.MGlobal.displayInfo("Done");
 
 # show Window
 def option():

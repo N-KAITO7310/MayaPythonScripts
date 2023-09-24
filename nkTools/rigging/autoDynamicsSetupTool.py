@@ -1,30 +1,83 @@
 # -*- coding: utf-8 -*-
 
 from maya import OpenMaya, cmds, mel;
+import maya.api.OpenMaya as om;
 from PySide2 import QtCore, QtWidgets, QtGui;
 from ..lib import qt;
 import pymel.core as pm;
 
 """
 create:2021/11/22
+last updated: 2022/10/10
+updateContent 2022/10/10: カーブの自動作成機能を追加
 
-install
-from nkTools.rigging import autoDynamicsSetupTool;
-reload(autoDynamicsSetupTool);
-reload(autoDynamicsSetupTool.qt);
-autoDynamicsSetupTool.option();
+ScriptEditorUse:
+from nkTools.rigging import autoDy;
+reload(autoDy);
+reload(autoDy.qt);
+autoDy.option();
 
 how to use
 1. first select mainRootJnt
 2. second select prepared ikCurve
 3. input fkikSwitchCtrlName
 4. load ikCtrl position jnt
+
+機能追加予定
+・複数ジョイント群に対し繰り返し実行
+・オプションの追加
+    ・FKのみ
+    ・IKのみ
+    ・ダイナミクスのみ
+・削除、再ビルド＊今後制作する簡易モジュラーリグの方で実現を検討したい
+
 """
+
+def maya_useNewAPI():
+    """Maya Python API 2.0 の明示的な使用宣言
+
+    The presence of this function tells Maya that the plugin produces, and
+    expects to be passed, objects created using the Maya Python API 2.0.
+
+    Args:
+        None
+    Returns:
+        None
+
+    """
+    pass;
+
+def buildCurve(jnts, prefix):
+    """
+    ジョイントのworldMatrixを取得し、vertexを作成し、カーブをビルドする
+    """
+    curve = cmds.curve(d=3, p=[(0, 0, 0), (0, 0, 0.333333), [0, 0, 1], [0, 0, 1.666667], [0, 0, 2]], k=[0, 0, 0, 1, 2, 2, 2]);
+    rebuilded = cmds.rebuildCurve(curve, ch=True, rpo=True, rt=0, end=True, s=len(jnts)-3, d=3);
+    renamedCurve = cmds.rename(rebuilded, "{}_curve".format(prefix));
+
+    omSel = om.MSelectionList();
+    omSel.add(renamedCurve);
+    dagPath = omSel.getDagPath(0);
+    curveFn = om.MFnNurbsCurve(dagPath);
+
+    for i, jnt in enumerate(jnts):
+        wMatrix = cmds.getAttr("{}.worldMatrix[0]".format(jnt));
+        mMat = om.MMatrix(wMatrix);
+        tMat = om.MTransformationMatrix(mMat);
+        trans = tMat.translation(om.MSpace.kWorld);
+        point = om.MPoint([trans.x, trans.y, trans.z])
+        curveFn.setCVPosition(i, point, space=om.MSpace.kWorld);
+
+    # shape update
+    curveFn.updateCurve();
+
+    return renamedCurve;
+
 
 def autoDynamicsSetupTool():
     # create fk ik system
     mainTopJnt = str(cmds.ls(sl=True)[0]);
-    curve = str(cmds.ls(sl=True)[1]);
+
     switchCtrl = settings.FKIKSwitchName;
 
     mainChildJnts = cmds.listRelatives(mainTopJnt, ad=True, type="joint");
@@ -35,11 +88,24 @@ def autoDynamicsSetupTool():
 
     basePrefix = settings.prefix;
 
+    if settings.createCurve:
+        """
+        ikCtrlJntsの位置を基準にカーブ、cvを作成する機能を追加する
+        """
+        curve = buildCurve(mainJnts, basePrefix);
+    else:
+        # 作らない場合は、二つ目に選択したものに対し実行する
+        curve = str(cmds.ls(sl=True)[1]);
+
+
     # FKIKSwitch
     if settings.createFKIKSwitch:
         switchCtrl = basePrefix + "_fkikSwitch_ctrl";
         mel.eval("curve -d 1 -p 0 0 -2.31 -p -0.99 0 -0.99 -p -0.33 0 -0.99 -p -0.33 0 0.99 -p -0.99 0 0.99 -p 0 0 2.31 -p 0.99 0 0.99 -p 0.33 0 0.99 -p 0.33 0 -0.99 -p 0.99 0 -0.99 -p 0 0 -2.31 -k 0 -k 1 -k 2 -k 3 -k 4 -k 5 -k 6 -k 7 -k 8 -k 9 -k 10 -n {0};".format(switchCtrl));
         fkikSwitchCtrlOffset = cmds.group(switchCtrl, n=switchCtrl + "_offset_grp");
+        cmds.setAttr("{}.overrideEnabled".format(fkikSwitchCtrlOffset), 1);
+        cmds.setAttr("{}.overrideColor".format(fkikSwitchCtrlOffset), 9);
+
         cmds.matchTransform(fkikSwitchCtrlOffset, mainTopJnt);
         cmds.move(0, 10, 0, fkikSwitchCtrlOffset, r=True, wd=True);
         cmds.addAttr(switchCtrl, ln="FKIKSwitch", at="double", min=0, max=1 ,dv=0);
@@ -53,6 +119,8 @@ def autoDynamicsSetupTool():
         cmds.setAttr(switchCtrl + ".Drag", e=True, keyable=True);
         cmds.addAttr(switchCtrl, ln="Turbulence", at="double", dv=0);
         cmds.setAttr(switchCtrl + ".Turbulence", e=True, keyable=True);
+    else:
+        switchCtrl = settings.FKIKSwitchName;
     ikfkReverse = cmds.shadingNode("reverse", n=switchCtrl + "_reverse", au=True);
     
     # duplicate jnts
@@ -100,6 +168,9 @@ def autoDynamicsSetupTool():
     hierarchyParent = "";
     fkCtrlTopOffset = "";
     fkCtrlGrp = cmds.group(em=True, n=basePrefix + "_fk_ctrl_grp");
+    cmds.setAttr("{}.overrideEnabled".format(fkCtrlGrp), 1);
+    cmds.setAttr("{}.overrideColor".format(fkCtrlGrp), 6);
+
     # fkSetup
     for i, fkJnt in enumerate(fkList):
         if i == len(fkList) -1:
@@ -111,7 +182,7 @@ def autoDynamicsSetupTool():
         cmds.circle(c=(0, 0, 0), nr=(1, 0, 0), sw=360, r=radius, d=3, ut=0, tol=0.01, s=8, ch=0, n=ctrlName);
         offsetGroup = str(cmds.group(ctrlName, n=ctrlName + offsetSuffix));
         cmds.matchTransform(offsetGroup, fkJnt);
-        cmds.orientConstraint(ctrlName, fkJnt, mo=False);
+        cmds.parentConstraint(ctrlName, fkJnt, mo=False);
 
         if i == 0:
             hierarchyParent = ctrlName;
@@ -130,11 +201,14 @@ def autoDynamicsSetupTool():
     # ikSpline apply
     cmds.ikHandle(sj=ikStartJnt, ee=ikEndJnt, curve=curve,
         sol="ikSplineSolver", ccv=False, roc=False, pcv=False, ns=3, n=basePrefix + "_ikHandle");
-
+    cmds.setAttr("{}.rootOnCurve".format(basePrefix + "_ikHandle"), True);
     ikCtrlJnts = [];
     ikCtrls = [];
     cmds.select(cl=True);
     ikCtrlGrp = cmds.group(em=True, name=basePrefix + "_ik_ctrl_grp");
+    cmds.setAttr("{}.overrideEnabled".format(ikCtrlGrp), 1);
+    cmds.setAttr("{}.overrideColor".format(ikCtrlGrp), 13);
+
     ikCtrlJntGrp = cmds.group(em=True, name=basePrefix + "_ik_ctrlJnt_grp");
     for i, ik in enumerate(ikCtrlCreatePosList):
         cmds.select(cl=True);
@@ -194,6 +268,9 @@ def autoDynamicsSetupTool():
     dynCtrlList = [];
     fkCtrlDupList = cmds.duplicate(fkCtrlTopOffset, renameChildren=True);
     dynCtrlGrp = cmds.group(em=True, n=basePrefix + "_dyn_ctrl_grp");
+    cmds.setAttr("{}.overrideEnabled".format(dynCtrlGrp), 1);
+    cmds.setAttr("{}.overrideColor".format(dynCtrlGrp), 21);
+
     for i, dup in enumerate(fkCtrlDupList):
         dup = str(dup);
         dynName = dup.replace("_fk_", "_dyn_");
@@ -258,7 +335,7 @@ def autoDynamicsSetupTool():
     cmds.connectAttr(switchCtrl + ".Simulation", bs + "." + dynCurve);
 
     clusterList = [];
-    cvCount = cmds.getAttr(baseDynCurve + ".cp", s=True);
+    cvCount = cmds.getAttr(baseDynCurve + ".cp", s=True);# TODO: omで作成したカーブのシェイプが消える問題がある
     cmds.select(baseDynCurve + ".cv[0:1]");
     topCluster = cmds.cluster(n=baseDynCurve + "_top_cluster");
     clusterList.append(topCluster);
@@ -269,9 +346,8 @@ def autoDynamicsSetupTool():
 
     for i, dynCtrl in enumerate(dynCtrlList):
         cmds.parentConstraint(dynCtrl, clusterList[i], mo=True);
-        if i == len(dynCtrlList)-1:
-            cmds.parentConstraint(dynCtrl, clusterList[i+1], mo=True);
-            cmds.parentConstraint(dynCtrl, clusterList[i+2], mo=True);
+        # if i == len(dynCtrlList)-1:
+        #     cmds.parentConstraint(dynCtrl, clusterList[i+2], mo=True);
             
     clusterGrp = cmds.group(em=True, n=basePrefix + "_cluster_grp");
     for cluster in clusterList:
@@ -284,6 +360,10 @@ def autoDynamicsSetupTool():
     # rename hairSystemNode
     cmds.rename(hairSystem, basePrefix + "_hairSystem");
     cmds.rename(follicle, basePrefix + "_follicle");
+
+    # cleanup
+    cmds.setAttr("{}.visibility".format(fkList[0]), 0);
+    cmds.setAttr("{}.visibility".format(ikList[0]), 0);
 
     # apply
 def main():
@@ -314,20 +394,24 @@ class OptionWidget(QtWidgets.QWidget):
         # checkbox selfCreateFkikSwitch
         switchLabel = QtWidgets.QLabel("CreateFKIKSwitch：", self);
         layout.addWidget(switchLabel, 1,0);
-        self.__createFKIKSwitch = QtWidgets.QCheckBox("Create", self);
+        self.__createFKIKSwitch = QtWidgets.QCheckBox("CreateFKIKSwitch", self);
         layout.addWidget(self.__createFKIKSwitch, 1, 1);
 
+        # checkbox autoCreateCurve
+        createCurveLabel = QtWidgets.QLabel("CreateCurve:", self);
+        layout.addWidget(createCurveLabel, 2, .0);
+        self.__createCurve = QtWidgets.QCheckBox("CreateCurve", self);
+        layout.addWidget(self.__createCurve, 2, 1)
 
         # Input fkikSwitchCtrlName
         switchNameLabel = QtWidgets.QLabel("FKIKSwitchName", self);
-        layout.addWidget(switchNameLabel, 2,0);
+        layout.addWidget(switchNameLabel, 3,0);
         self.__FKIKSwitchName = QtWidgets.QLineEdit(self);
-        layout.addWidget(self.__FKIKSwitchName, 2,1)
-
+        layout.addWidget(self.__FKIKSwitchName, 3,1)
 
         # ストッカービューを設定
         stockerView = StockerView(self);
-        layout.addWidget(stockerView, 3, 0, 1, 3);
+        layout.addWidget(stockerView, 4, 0, 1, 3);
 
         # set ikCtrlJnt model
         self.__ikCtrlJntModel = StockItemModelIkCtrlJnt(self);
@@ -336,7 +420,7 @@ class OptionWidget(QtWidgets.QWidget):
         # ikCtrlJnt load button
         button = QtWidgets.QPushButton("load", self);
         button.clicked.connect(self.loadIkCtrlJnts);
-        layout.addWidget(button, 4, 0);
+        layout.addWidget(button, 5, 0);
         
         
         self.initialize();
@@ -345,6 +429,7 @@ class OptionWidget(QtWidgets.QWidget):
     def initialize(self):
         self.__prefix.setText(settings.prefix);
         self.__createFKIKSwitch.setChecked(settings.createFKIKSwitch);
+        self.__createCurve.setChecked(settings.createCurve);
         self.__FKIKSwitchName.setText(settings.FKIKSwitchName);
 
     # ウィンドウで入力された値を設定にセット
@@ -352,6 +437,7 @@ class OptionWidget(QtWidgets.QWidget):
         settings.prefix = str(self.__prefix.text());
         settings.FKIKSwitchName = str(self.__FKIKSwitchName.text());
         settings.createFKIKSwitch = self.__createFKIKSwitch.isChecked();
+        settings.createCurve = self.__createCurve.isChecked();
         
         settings.ikCtrlJntPosList = [];
         ikCtrlJntRowCount = self.__ikCtrlJntModel.rowCount();
@@ -370,7 +456,6 @@ class OptionWidget(QtWidgets.QWidget):
             return;
         for obj in objList:
             self.__ikCtrlJntModel.appendItem(str(obj));
-            print(obj);
 
 # setting Window
 class MainWindow(QtWidgets.QMainWindow):
@@ -389,6 +474,8 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # 実行＆closeにウィンドウタイトルを設定
         toolWidget.setActionName(self.windowTitle());
+
+        # set Slot
         # appliedシグナルにslotを設定
         toolWidget.applied.connect(optionWidget.apply);# qt.Callback(optionWidget.apply) ←動作しないため削除
         # closedのスロットにQmainWindowのcloseメソッドを設定
@@ -438,6 +525,7 @@ class Settings(object):
     def __init__(self):
         self.prefix = "";
         self.createFKIKSwitch = True;
+        self.createCurve = True;
         self.FKIKSwitchName = "_fkikSwitch_ctrl";
         self.ikCtrlJntPosList = [];
 

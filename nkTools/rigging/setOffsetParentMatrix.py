@@ -4,15 +4,20 @@ import maya.cmds as cmds
 """
 
 Set OffsetParentMatrix Tool
+created: 2021/12/29
+
+対象オブジェクトが既に持っている座標情報をoffssetParentMatrixにセットする簡易スクリプト
 
 1.Duplicate Target
 2.connect dup.matrix to target.offsetParentMatrix
 3.set Attr target trans rot scale shear 0
 4.delete dup
 
+ScriptEditorUse:
 from nkTools.rigging import setOffsetParentMatrix;
 reload(setOffsetParentMatrix);
 setOffsetParentMatrix;
+
 """
 # prepare var
 matrixAttr = ".matrix";

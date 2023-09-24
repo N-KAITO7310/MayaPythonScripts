@@ -8,6 +8,14 @@ import pymel.core as pm;
 
 """
 JointSnapGenerateTool
+
+create:
+2021/10/30~
+
+選択頂点と同一座標にジョイントを複数生成するスクリプト
+
+現在未着手
+
 """
 
 def jointSnapGenerateTool:

@@ -2,6 +2,21 @@
 import maya.cmds as cmds;
 import pymel.core as pm;
 
+"""
+
+ShowControllerCameraWindow
+created: 2021/12/28
+
+非汎用、自作リグシーン専用。
+UIとしてデザインされたコントローラーを、パネルポップアップで表示する。
+Rigシーンを開いた際に自動実行されるようscriptノードを埋め込む。
+
+from nkTools.rigging import showControllerCameraWindow;
+reload(showControllerCameraWindow);
+showControllerCameraWindow;
+
+"""
+
 # create camera
 existCamera = cmds.ls("forControl_camera*", type="transform");
 if len(existCamera) == 0:

@@ -12,14 +12,13 @@ import maya.api.OpenMayaAnim as oma;
 import maya.mel as mel;
 
 """
-EprefixÝ’è
-EƒRƒ“ƒgƒ[ƒ‰[ƒVƒFƒCƒv‘I‘ð
+AutoCreateTweakers
 
-‘O’ñ
-EŽÀs‚·‚é‚ÆƒƒbƒVƒ…‚Í•¡»‚³‚ê‚éB‚»‚Ì•¡»‚³‚ê‚½ƒƒbƒVƒ…‚ªƒuƒŒƒ“ƒhƒVƒFƒCƒv‚³‚ê‚é‘¤‚Æ‚È‚éƒƒbƒVƒ…‚Æ‚µAŒ³‚ÌƒƒbƒVƒ…‚ÍƒXƒLƒ“—p‚Æ‘z’è‚·‚éB
-EŠù‚ÉƒWƒ‡ƒCƒ“ƒg‚ªƒXƒLƒ“‚³‚ê‚Ä‚¢‚éó‘Ô‚©‚Ç‚¤‚©(ƒWƒ‡ƒCƒ“ƒg‚ª–@ü‚Æ“¯‚¶Œü‚«‚É‚È‚é‚©‚Ç‚¤‚©‚Ì·ˆÙ‚ª‚Å‚é)
+created: 2022/12/27
 
-ŽQlURL
+ä¸‹è¨˜ãƒãƒ¥ãƒ¼ãƒˆãƒªã‚¢ãƒ«ã«ãŠã‘ã‚‹ã€ãƒ¡ãƒƒã‚·ãƒ¥ã‚’ç›´æŽ¥é¸æŠžã—ã¦ãã‚Œè‡ªä½“ã‚’å‹•ã‹ã—ã¦ã„ã‚‹ã‚ˆã†ã«è¦‹ã›ã‹ã‚‹ãŸã‚ã®ã‚®ãƒŸãƒƒã‚¯ã‚’è‡ªå‹•ç”Ÿæˆã™ã‚‹ãŸã‚ã®script
+
+å‚è€ƒURL
 https://www.cgcircuit.com/workshop/face-rigging
 """
 

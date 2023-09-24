@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 import maya.cmds as cmds;
 
+"""
+
+リグ制作中等に書き溜めたコード群
+
+"""
+
 # delete under follicle curve
 selected = cmds.ls(sl=True);
 cmds.select(cl=True);
@@ -291,7 +297,7 @@ for jnt in stretchJnts:
         cmds.connectAttr(scaleBC + ".color1R", jnt + ".scaleX");
         
 
-# proximityPin用のコントローラグループにドライバを設定しコンストレイントす�ProximityPinは手動で行う)
+# proximityPin用のコントローラグループにドライバを設定しコンストレイントす�ProximityPinは手動で行う)
 targetGrps = cmds.ls(sl=True);
 for targetGrp in targetGrps:
     target = str(targetGrp);
@@ -303,7 +309,7 @@ for targetGrp in targetGrps:
     ctrl = str(cmds.listRelatives(auto, c=True)[0]);
     cmds.pointConstraint(driverGrp, auto, mo=False);
 
-# followコントローラとスキンジョイント用コントローラとを接続す�
+# followコントローラとスキンジョイント用コントローラとを接続す�
 ctrls = cmds.ls(sl=True);
 for ctrl in ctrls:
     followCtrl = str(ctrl);

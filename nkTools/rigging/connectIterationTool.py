@@ -8,17 +8,18 @@ import pymel.core as pm;
 
 """
 ConnectIterationTool
-要件：
-・接続側と、被接続側のノードをそれぞれ複数読み込み
-・それぞれの側で接続するアトリビュート名を入力する
+create:2021/10/29
 
-必要入力情報
-・接続オブジェクト名
-・被接続側オブジェクトリスト
-・それぞれのアトリビュートテキストデータ
-←できたらアトリビュート一覧をリストに表示して選択できる仕様に今後変更したい
+接続元と接続先をロードし、アトリビュートを指定して接続の反復を行う簡易ツール
 
-多＊多conection
+今後：
+・アトリビュート一覧をリストに表示して選択できる仕様に今後変更したい
+
+ScriptEditorUse:
+from nkTools.rigging import connectIterationTool;
+reload(connectIterationTool);
+reload(connectIterationTool.qt);
+connectIterationTool.option();
 
 """
 

@@ -6,8 +6,12 @@ import pymel.core as pm;
 
 
 """
-connection mainJnt to fk and ik trans and rot
+Connect mainJnt to fk and ik trans and rot
+created: 2021/12/11
 
+FKIKセットアップをブレンドカラー利用で行う場合の接続スクリプトを切り出したもの
+
+ScriptEditorUse:
 from nkTools.rigging import connectMaintJntToFKIK;
 reload(connectMaintJntToFKIK);
 connectMaintJntToFKIK;

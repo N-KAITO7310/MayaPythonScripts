@@ -3,7 +3,18 @@
 from logging import root
 from maya import cmds, mel;
 
-# Method by Hamondo Youtube Channel URL:https://www.youtube.com/user/Hazmondo
+"""
+AutoCreateSoftIk
+
+created: 2022/09/16
+
+＊制作当時急遽時間が取れなくなったために未完成のままとなっている。下記を参考としたソフトIKギミックを自動作成することを意図して開発に着手したもの。
+
+Method by Hamondo Youtube Channel URL:https://www.youtube.com/user/Hazmondo
+
+"""
+
+
 # get jnts
 jnts = cmds.ls(sl=True, type="joint");
 startJnt = jnts[0];

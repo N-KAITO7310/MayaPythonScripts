@@ -2,19 +2,12 @@
 import maya.cmds as cmds;
 
 """
-自作リグのミラーポーズツール
+MirrorRotationConnect
+created: 2022/02/02
 
-Memo
-・移動地の反転は、原点を基準に反転したい方向に-1を乗じた値
-・オイラー回転の単純な利用では回転の反転はできない
+スケール-1を利用した回転の反転ギミックを用い、driverからdrivenへ接続を行う
 
-
-・rootを選択して実行
-・IKなどの移動値と、回転のミラーを行う
-
-・Lの値をRに、Rの値をLに送る
-・プリフィックスのないものは逆の値を入れる
-
+ScriptEditorUse:
 from nkTools.rigging import mirrorRotationConnect;
 reload(mirrorRotationConnect);
 mirrorRotationConnect;
