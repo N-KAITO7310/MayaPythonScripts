@@ -27,7 +27,7 @@ py3:
 import sys
 import imp
 import importlib
-dirpath = r'C:\Users\kn_un\Documents\maya\scripts\nkTools\test\skinClusterIO_tests'
+dirpath = r'C:\\Users\kn_un\Documents\maya\scripts\nkTools\test\skinClusterIO_tests'
 sys.path.insert(0, dirpath)
 import nkTools.test.skinClusterIO as skinClusterIO;
 importlib.reload(skinClusterIO)

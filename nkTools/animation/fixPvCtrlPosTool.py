@@ -303,11 +303,19 @@ def fixPvCtrlPos():
             hipToFootVec = footJntVec - hipJntVec;
 
             # normalize
-            hipToFootLenNormalized = hipToFootVec.normalize();
+            hipToFootVec.normalize();
+
+            """
+            or
+            normalizeをしない場合
+            dotProd = hipToKneeVec * hipToFootVec;
+            dotProdVec = (hipToFootVec * (dotProd / hipToFootVec.length())) + hipJntVec;
+            参考: http://www.thothchildren.com/chapter/5b6702782787593b86356069
+            """
 
             # dot product
             dotProd = hipToKneeVec * hipToFootVec;
-            dotProdVec = (hipToFootLenNormalized * dotProd) + hipJntVec;
+            dotProdVec = (hipToFootVec * dotProd) + hipJntVec;
             dotToKneeVec = kneeJntVec - dotProdVec;
             dotToKneeVecNormalized = dotToKneeVec.normalize();
 

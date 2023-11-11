@@ -587,7 +587,7 @@ def setupBiped(side, prefix, root, jointHierarchy):
     shoulderToHandLen = ikHandJntVec - ikShoulderJntVec;
 
     # normalize
-    shoulderToHandLenNorm = shoulderToHandLen.normalize();
+    shoulderToHandLenNorm = shoulderToHandLen.normal();
     # dot product length
     projLength = shoulderToElbowLen * shoulderToHandLenNorm;
     # dot product vector
