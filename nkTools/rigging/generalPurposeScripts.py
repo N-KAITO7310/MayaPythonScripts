@@ -684,3 +684,44 @@ for i in range(201):
         cmds.setAttr(group + ".translateZ", count * -20);
         
         count = count + 1;
+        
+# poleVector配置サンプルscript 参考：https://vimeo.com/66015036
+"""
+poleVector配置サンプルscript
+
+vecA, vecBがある時
+vecB'を射影とする
+vecA*vecB=
+1. vecA.x*vecB.x + vecA.y*vecB.y + vecA.y*vecB.y
+2. vecA.length * vecB.length * cosΘ
+vecB'=vecA.length * cosΘ
+
+上記2よりvecB.lengthが1であれば
+vecA*vecB(内積)=vecA.length * cosΘ=vecB'
+
+または、vecBが正規化されていなければ
+(vecA*vecB) / vecB.length = vecA.length * vecB.length * cosΘ = vecB'
+
+参考：
+スクリプト:https://vimeo.com/66015036
+数式:http://www.thothchildren.com/chapter/5b6702782787593b86356069
+"""
+startVec = om.MVector(cmds.xform("joint1", q=True, translation=True, ws=True))
+midVec = om.MVector(cmds.xform("joint2", q=True, translation=True, ws=True))
+endVec = om.MVector(cmds.xform("joint3", q=True, translation=True, ws=True))
+
+
+startEnd = endVec - startVec;
+startMid = midVec - startVec;
+
+dot = startEnd * startMid;
+
+proj = dot / startEnd.length()
+startEndNorm = startEnd.normal();
+
+projV = startEndNorm * v;
+
+arrowV = midVec - projV;
+finalV = midVec + arrowV;
+
+cmds.xform("locator1", ws=True, t=[finalV.x, finalV.y, finalV.z])

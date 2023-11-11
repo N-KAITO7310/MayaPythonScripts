@@ -5,13 +5,25 @@ import boneChain, control;
 from utils import nameUtils;
 
 class IkChain(boneChain.BoneChain):
-    def __init__(self, baseName="ikChain", side="C", ctrlColor="yellow", ctrlSicze=1):
+    def __init__(self, baseName="ikChain", side="C", ctrlColor="yellow", ctrlSicze=1, solver="ikSCsolver", controlOrient=[0, 0, 0]):
         boneChain.BoneChain.__init__(self, baseName, side);
 
         self.baseName = baseName;
         self.side = side;
         self.ctrlColor = ctrlColor;
         self.Size = ctrlSize;
+        self.solver = solver;
+        self.controlOrient = controlOrient;
+
+        self.__acceptedSolvers = ["ikSCsolver", "ikRPsolver"];
+
+        self.ikCtrl = None;
+        self.poleVectorConst = None;
+        self.ikHandle = None;
+        self.ikConst = None;
+        self.poleVectorConst = None;
+        self.ikEffector = None;
+
         self.grpArray = [];
         self.ctrlsArray = [];
 
